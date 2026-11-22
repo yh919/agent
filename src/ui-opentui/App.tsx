@@ -48,6 +48,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type { AgentRunOptions } from '../agent/agent.js';
 import { type AgentEvent, MaxStepsError } from '../agent/events.js';
 import { findActiveMention, listMentionDir, parseMentionPath } from '../agent/mentions.js';
+import { formatPlanUsage, readPlanUsage } from '../llm/cliclient.js';
 import { formatUserError } from '../llm/errors.js';
 import type { BannerData } from '../ui/Banner.js';
 import type { AppProps } from '../ui/appTypes.js';
@@ -65,6 +66,8 @@ import {
   loadHistory,
   searchHistory,
 } from '../ui/history.js';
+import { exportTranscript, formatContext, formatSessionUsage } from '../ui/infoCommands.js';
+import { sessionPickerRequest } from '../ui/sessionPicker.js';
 import { shortcutsPanel } from '../ui/shortcuts.js';
 import { filterSlash } from '../ui/slashItems.js';
 import type { TranscriptEntry, TranscriptFilter } from '../ui/state.js';
@@ -100,6 +103,8 @@ const CONTEXT_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 //   menu  — + slash/@ picker ≈ 6 more
 //   modal — permission/ask/skills/secret (detail height-capped)
 const FOOTER_IDLE = 5;
+/** Turns at least this long ring the bell / notify when they finish. */
+const LONG_TURN_NOTIFY_MS = 30_000;
 const FOOTER_WITH_MENU = 11;
 const FOOTER_MODAL = 22;
 const CHAT_MIN_HEIGHT = 3;
@@ -126,6 +131,8 @@ export function App({
   resumeSummary,
   onExit,
   historyFile = historyPath(),
+  listSessions,
+  resumeSession,
 }: AppProps) {
   if (!onExit) throw new Error('OpenTUI App requires onExit from the CLI mount');
   const renderer = useRenderer();
@@ -162,8 +169,17 @@ export function App({
   useEffect(() => {
     if (resumeSummaryShown.current || !resumeSummary) return;
     resumeSummaryShown.current = true;
+    // Show the earlier conversation like Claude Code does on resume: user and
+    // assistant text only (tool traffic and injected notes stay hidden).
+    for (const m of agent.getHistory()) {
+      const text = m.content.trim();
+      if (!text || /^(<|\[\/)/.test(text)) continue;
+      if (m.role === 'user') dispatch({ type: 'append', entry: { kind: 'user', text } });
+      else if (m.role === 'assistant')
+        dispatch({ type: 'append', entry: { kind: 'assistant', text } });
+    }
     dispatch({ type: 'append', entry: { kind: 'system', text: resumeSummary } });
-  }, [resumeSummary]);
+  }, [resumeSummary, agent]);
 
   const applyYolo = useCallback(
     (on: boolean) => {
@@ -504,6 +520,66 @@ export function App({
       setHistoryIdx(null);
       historyDraft.current = '';
 
+      // Info commands that only read state (Claude Code parity).
+      const cmd = agentValue.trim();
+      if (cmd === '/usage' || cmd === '/cost') {
+        const plan = readPlanUsage();
+        const text = [
+          plan
+            ? formatPlanUsage(plan)
+            : 'Claude plan usage: not reported yet (shows after a request with the Claude account provider)',
+          formatSessionUsage(agent.getUsage()),
+        ].join('\n');
+        dispatch({ type: 'append', entry: { kind: 'system', text } });
+        return;
+      }
+      if (cmd === '/context') {
+        dispatch({
+          type: 'append',
+          entry: { kind: 'system', text: formatContext(agent.contextBreakdown()) },
+        });
+        return;
+      }
+      if (cmd === '/export') {
+        try {
+          const path = exportTranscript(state.transcript, process.cwd());
+          dispatch({
+            type: 'append',
+            entry: { kind: 'system', text: `transcript saved to ${path}` },
+          });
+        } catch (err) {
+          dispatch({
+            type: 'append',
+            entry: { kind: 'error', text: `export failed: ${String(err)}` },
+          });
+        }
+        return;
+      }
+
+      // /resume → pick a recent session; the CLI relaunches into it on exit
+      // (session id is baked into per-session stores at startup).
+      if (agentValue.trim() === '/resume') {
+        const sessions = listSessions?.().slice(0, 20) ?? [];
+        if (!resumeSession || sessions.length === 0) {
+          dispatch({
+            type: 'append',
+            entry: { kind: 'system', text: 'no saved sessions to resume' },
+          });
+          return;
+        }
+        dispatch({
+          type: 'set-ask',
+          req: sessionPickerRequest(sessions, (id) => {
+            dispatch({ type: 'set-ask', req: null });
+            if (!id) return;
+            resumeSession(id);
+            runCtl.current?.abort();
+            onExit?.();
+          }),
+        });
+        return;
+      }
+
       // `!cmd` → run it now through the shell tool + permission gate (no model
       // call); output lands in context for the next turn, like Claude Code.
       if (agentValue.startsWith('!') && agentValue.slice(1).trim()) {
@@ -617,6 +693,9 @@ export function App({
       generateFindingsReport,
       listJobs,
       historyFile,
+      listSessions,
+      resumeSession,
+      state.transcript,
     ],
   );
 
@@ -1134,18 +1213,32 @@ export function App({
   }, [agent, state.transcript.length, state.busy]);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // Usage at turn start → the busy line shows this turn's tokens, not the session's.
+  const turnStartUsage = useRef(agent.getUsage());
   useEffect(() => {
     if (!state.busy) {
       setElapsedSeconds(0);
       return;
     }
     const start = Date.now();
+    turnStartUsage.current = agent.getUsage();
     setElapsedSeconds(0);
     const id = setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - start) / 1000));
     }, 1000);
-    return () => clearInterval(id);
-  }, [state.busy]);
+    return () => {
+      clearInterval(id);
+      // Long turn finished → bell + OSC 9 desktop notification (iTerm2,
+      // Ghostty, kitty, WezTerm, Warp), so you can look away meanwhile.
+      if (Date.now() - start >= LONG_TURN_NOTIFY_MS) {
+        process.stdout.write('\x07\x1b]9;Lepus: turn finished\x07');
+      }
+    };
+  }, [state.busy, agent]);
+  const turnTokens = {
+    in: Math.max(0, statusInfo.usage.inputTokens - turnStartUsage.current.inputTokens),
+    out: Math.max(0, statusInfo.usage.outputTokens - turnStartUsage.current.outputTokens),
+  };
 
   // Multi-line drafts grow the input frame; FOOTER_IDLE already covers a
   // 1-line frame + hint + status. Soft-wrapped long lines add physical
@@ -1271,6 +1364,7 @@ export function App({
               findingsCount={state.findingsCount}
               usage={statusInfo.usage}
               elapsedSeconds={elapsedSeconds}
+              turnTokens={turnTokens}
               draftTokens={Math.floor(inputValue.length / 4)}
               maxWidth={chatWidth}
               modeChip={

@@ -18,17 +18,13 @@ import { theme } from '../ui/theme.js';
 
 export type { StatusProps } from '../ui/StatusBar.js';
 
-const DOTS_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-const DOTS_INTERVAL_MS = 80;
-
-function useDotsSpinner(active: boolean): string {
+function useFrames(frames: string[], intervalMs: number): string {
   const [frame, setFrame] = useState(0);
   useEffect(() => {
-    if (!active) return;
-    const id = setInterval(() => setFrame((f) => (f + 1) % DOTS_FRAMES.length), DOTS_INTERVAL_MS);
+    const id = setInterval(() => setFrame((f) => (f + 1) % frames.length), intervalMs);
     return () => clearInterval(id);
-  }, [active]);
-  return DOTS_FRAMES[frame] ?? DOTS_FRAMES[0] ?? '';
+  }, [frames, intervalMs]);
+  return frames[frame] ?? frames[0] ?? '';
 }
 
 function compactTarget(target: string): string {
@@ -39,6 +35,17 @@ export interface OpenTuiStatusProps extends StatusProps {
   maxWidth?: number;
   /** Right-aligned mode chip (Shift+Tab cycles it); falls back to YOLO. */
   modeChip?: string;
+  /** Tokens spent by the running turn (↑ sent, ↓ received). */
+  turnTokens?: { in: number; out: number };
+}
+
+const STAR_FRAMES = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+
+/** 950 → "950", 3140 → "3.1k", 12000 → "12k". */
+export function shortTokens(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${k < 10 ? k.toFixed(1).replace(/\.0$/, '') : Math.round(k)}k`;
 }
 
 function chipOf(props: OpenTuiStatusProps): string {
@@ -72,12 +79,19 @@ export function StatusBar(props: OpenTuiStatusProps) {
 }
 
 function BusyLine(props: OpenTuiStatusProps) {
-  const spin = useDotsSpinner(true);
+  const spin = useFrames(STAR_FRAMES, 120);
   const phaseText = phaseLabel(props.phase);
   // Tool name when running a tool; otherwise phase (Writing / Thinking / …).
   const primary =
-    props.phase === 'running-tool' && props.runningTool ? props.runningTool : phaseText;
-  const clock = props.elapsedSeconds ? ` ${formatElapsed(props.elapsedSeconds)}` : '';
+    props.phase === 'running-tool' && props.runningTool ? props.runningTool : `${phaseText}…`;
+  // Claude Code style: "✻ Writing… (0:12 · ↑3.1k ↓420 · esc to interrupt)".
+  const t = props.turnTokens;
+  const parts = [
+    props.elapsedSeconds ? formatElapsed(props.elapsedSeconds) : '',
+    t && t.in + t.out > 0 ? `↑${shortTokens(t.in)} ↓${shortTokens(t.out)}` : '',
+    'esc to interrupt',
+  ].filter(Boolean);
+  const clock = ` (${parts.join(' · ')})`;
   const budget = Math.max(
     12,
     (props.maxWidth ?? 200) - (chipOf(props) ? chipOf(props).length + 2 : 0),

@@ -8,9 +8,9 @@
 // same content-tool-call parser the local backends use.
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { delimiter, dirname, join } from 'node:path';
 import type { StreamingClient } from './client.js';
 import { parseContentToolCalls } from './contentToolCalls.js';
 import { newCallID } from './ids.js';
@@ -185,7 +185,8 @@ export class CliClient implements StreamingClient {
     const onEvent = (ev: Record<string, any>) => {
       switch (this.backend) {
         case 'claude-code':
-          if (ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta')
+          if (ev.type === 'rate_limit_event') savePlanUsage(ev.rate_limit_info);
+          else if (ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta')
             push(ev.event.delta.text);
           else if (ev.type === 'result') {
             const u = ev.usage ?? {};
@@ -279,4 +280,65 @@ export class CliClient implements StreamingClient {
     if (shown < text.length) onDelta(text.slice(shown)); // held-back text that wasn't a tool call
     return { message: { role: 'assistant', content: text.trim() }, finishReason: 'stop', usage };
   }
+}
+
+// ---------- Claude plan usage (5-hour / weekly windows) ----------
+
+export interface PlanWindow {
+  utilization: number; // 0..1
+  resetsAt: number; // unix seconds
+}
+export interface PlanUsage {
+  at: number; // ms, when Claude reported it
+  windows: Record<string, PlanWindow>;
+}
+
+export function planUsagePath(): string {
+  return join(homedir(), '.lepus', 'agent', 'plan-usage.json');
+}
+
+/** Claude Code streams a rate_limit_event per request; keep the latest on disk. */
+function savePlanUsage(info: unknown, path = planUsagePath()): void {
+  const windows = (info as { unifiedWindows?: Record<string, PlanWindow> } | undefined)
+    ?.unifiedWindows;
+  if (!windows) return;
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify({ at: Date.now(), windows } satisfies PlanUsage));
+  } catch {
+    /* best-effort */
+  }
+}
+
+export function readPlanUsage(path = planUsagePath()): PlanUsage | null {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as PlanUsage;
+  } catch {
+    return null;
+  }
+}
+
+/** Human summary for /usage. */
+export function formatPlanUsage(u: PlanUsage, now = Date.now()): string {
+  const names: Record<string, string> = { five_hour: '5-hour', seven_day: 'weekly' };
+  const bar = (f: number) => {
+    const n = Math.round(Math.min(1, Math.max(0, f)) * 20);
+    return `${'█'.repeat(n)}${'░'.repeat(20 - n)}`;
+  };
+  const when = (sec: number) => {
+    const mins = Math.max(0, Math.round((sec * 1000 - now) / 60_000));
+    return mins < 60
+      ? `${mins}m`
+      : mins < 2880
+        ? `${Math.round(mins / 60)}h`
+        : `${Math.round(mins / 1440)}d`;
+  };
+  const age = Math.round((now - u.at) / 60_000);
+  const lines = Object.entries(u.windows).map(
+    ([k, w]) =>
+      `  ${(names[k] ?? k).padEnd(8)} ${bar(w.utilization)} ${Math.round(w.utilization * 100)}% used · resets in ${when(w.resetsAt)}`,
+  );
+  return [`Claude plan usage (reported ${age < 1 ? 'just now' : `${age}m ago`})`, ...lines].join(
+    '\n',
+  );
 }

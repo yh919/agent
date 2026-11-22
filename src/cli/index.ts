@@ -7,6 +7,7 @@
 import { CLI_BACKENDS, isCliBackend } from '../llm/cliclient.js';
 import './forceColor.js';
 
+import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { type FSWatcher, existsSync, watch as fsWatch, renameSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -90,10 +91,13 @@ import type { BannerData } from '../ui/Banner.js';
 import type { AppProps } from '../ui/appTypes.js';
 import { BridgedAskPrompter } from '../ui/askBridge.js';
 import { BridgedPrompter } from '../ui/permBridge.js';
+import { sessionPickerRequest } from '../ui/sessionPicker.js';
 import { UserProfileStore } from '../userProfile/store.js';
 import { VERSION, describe } from '../version/version.js';
 
 const GROQ_AUTO_COMPACT_THRESHOLD = 5500;
+/** 75% of a 200K window, leaving room for the reply and the next tool output. */
+const CLI_AUTO_COMPACT_THRESHOLD = 150_000;
 
 interface ParsedFlags {
   showVersion: boolean;
@@ -115,6 +119,9 @@ interface ParsedFlags {
   listSkills: boolean;
   listTools: boolean;
 }
+
+/** `--resume` with no id: choose from recent sessions before the TUI starts. */
+const PICK_SESSION = '?';
 
 function parseFlags(argv: string[]): ParsedFlags {
   const out: ParsedFlags = {
@@ -168,7 +175,8 @@ function parseFlags(argv: string[]): ParsedFlags {
           .filter(Boolean);
         break;
       case '--resume':
-        out.resumeID = next();
+        // Bare `--resume` (no id) → pick from recent sessions at startup.
+        out.resumeID = argv[i + 1] && !argv[i + 1]?.startsWith('-') ? next() : PICK_SESSION;
         break;
       case '--yolo':
       // --dangerously-skip-permissions is the original spelling, kept as an
@@ -471,6 +479,9 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
   // to derive a stable file path before tools are registered.
   const sessionDir = sessionStore.dirFromPath('');
   sessionStore.cleanupStaleTemps(sessionDir, 60_000);
+  if (flags.resumeID === PICK_SESSION) {
+    flags.resumeID = (await pickSession(sessionDir)) ?? '';
+  }
   let sessionID = flags.resumeID;
   let resuming = false;
   if (!sessionID) {
@@ -1061,6 +1072,11 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     bindBannerPublisher: (publish) => bannerHolder.bind(publish),
     bindNoticePublisher: (publish) => noticeHolder.bind(publish),
     resumeSummary,
+    listSessions: () => sessionStore.listDir(sessionDir),
+    // /resume: remember the pick; after the TUI closes we relaunch into it.
+    resumeSession: (id: string) => {
+      relaunchResumeID = id;
+    },
     sessionDebug,
     setYolo: (on: boolean) => prompter.setYolo(on),
     setPermissionMode: (mode: 'ask' | 'auto-safe' | 'yolo') => prompter.setMode(mode),
@@ -1134,6 +1150,8 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     generateFindingsReport,
   } satisfies AppProps;
 
+  let exitCode = 0;
+  let relaunchResumeID = '';
   try {
     await runOpenTuiApp(appProps);
   } finally {
@@ -1157,7 +1175,8 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     await closeBurpBridge();
     await memoryProvider?.close();
   }
-  return 0;
+  if (relaunchResumeID) exitCode = relaunchInto(relaunchResumeID);
+  return exitCode;
 }
 
 // ---------- helpers ----------
@@ -1270,9 +1289,6 @@ function effectiveAutoCompactThreshold(cfg: config.Config): number {
   }
   return cfg.auto_compact_threshold;
 }
-
-/** 75% of a 200K window, leaving room for the reply and the next tool output. */
-const CLI_AUTO_COMPACT_THRESHOLD = 150_000;
 
 function effectivePromptProfile(cfg: config.Config): PromptProfile {
   return cfg.backend === 'groq' || cfg.backend === 'gemini' ? 'compact' : 'full';
@@ -1476,4 +1492,48 @@ function earlyHolder<T>(): { publish: (v: T) => void; bind: (fn: (v: T) => void)
       for (const v of queue.splice(0)) fn(v);
     },
   };
+}
+
+/** Startup session picker. Resolves an id, or null for a fresh session. */
+async function pickSession(sessionDir: string): Promise<string | null> {
+  const sessions = sessionStore.listDir(sessionDir).slice(0, 20);
+  if (sessions.length === 0) return null;
+  const { createCliRenderer } = await import('@opentui/core');
+  const { createRoot } = await import('@opentui/react');
+  const { AskModal } = await import('../ui-opentui/AskModal.js');
+  const renderer = await createCliRenderer({ exitOnCtrlC: false });
+  return new Promise((resolve) => {
+    const finish = (id: string | null) => {
+      renderer.destroy();
+      resolve(id);
+    };
+    createRoot(renderer).render(
+      React.createElement(AskModal, {
+        req: sessionPickerRequest(sessions, (id) => finish(id)),
+      }),
+    );
+  });
+}
+
+/**
+ * Re-run Lepus with `--resume <id>` in this terminal (used by /resume — the
+ * session id is baked into per-session stores at startup, so switching
+ * means a fresh process). Works for the compiled binary and bun/node.
+ */
+function relaunchInto(id: string): number {
+  const compiled = (process.argv[1] ?? '').startsWith('/$bunfs/');
+  const program = compiled ? [] : [process.argv[1] ?? ''];
+  const flags: string[] = [];
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--resume') {
+      if (argv[i + 1] && !argv[i + 1]?.startsWith('-')) i += 1;
+      continue;
+    }
+    flags.push(argv[i] ?? '');
+  }
+  const r = spawnSync(process.execPath, [...program, ...flags, '--resume', id], {
+    stdio: 'inherit',
+  });
+  return r.status ?? 1;
 }

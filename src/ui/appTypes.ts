@@ -55,4 +55,8 @@ export interface AppProps {
   onExit?: () => void;
   /** Prompt-history JSONL (default ~/.lepus/agent/history.jsonl); null = in-memory only. */
   historyFile?: string | null;
+  /** /resume: recent sessions, newest first. */
+  listSessions?: () => import('../session/store.js').Summary[];
+  /** /resume: switch to this session (the CLI relaunches into it on exit). */
+  resumeSession?: (id: string) => void;
 }

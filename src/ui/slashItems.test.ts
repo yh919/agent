@@ -14,7 +14,7 @@ describe('filterSlash', () => {
 
   it('prefix-matches command names', () => {
     expect(filterSlash('/he').map((s) => s.name)).toEqual(['/help']);
-    expect(filterSlash('/re').map((s) => s.name)).toEqual(['/report', '/reset']);
+    expect(filterSlash('/re').map((s) => s.name)).toEqual(['/report', '/resume', '/reset']);
     expect(
       filterSlash('/t')
         .map((s) => s.name)
@@ -56,6 +56,6 @@ describe('filterSlash', () => {
 
   it('prefers prefix matches over fuzzy when both exist', () => {
     // '/re' prefix-matches /report and /reset only — fuzzy is NOT consulted
-    expect(filterSlash('/re').map((s) => s.name)).toEqual(['/report', '/reset']);
+    expect(filterSlash('/re').map((s) => s.name)).toEqual(['/report', '/resume', '/reset']);
   });
 });

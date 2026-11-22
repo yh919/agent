@@ -862,3 +862,17 @@ describe('state.reducer rewind', () => {
     expect(s.transcript.map((e) => e.text)).toEqual(['A', 'a']);
   });
 });
+
+describe('state.reducer todo checklist', () => {
+  it('keeps a single live checklist at the bottom', () => {
+    const todo = (status: 'pending' | 'completed') => ({
+      type: 'agent-event' as const,
+      event: { type: 'todo' as const, items: [{ id: '1', text: 'recon', status }] },
+    });
+    let s = reducer(seed(), todo('pending'));
+    s = reducer(s, { type: 'append', entry: { kind: 'assistant', text: 'working' } });
+    s = reducer(s, todo('completed'));
+    expect(s.transcript.filter((e) => e.kind === 'todo')).toHaveLength(1);
+    expect(s.transcript.at(-1)?.kind).toBe('todo');
+  });
+});

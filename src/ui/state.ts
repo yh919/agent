@@ -1047,9 +1047,15 @@ function applyAgentEvent(state: AppState, ev: AgentEvent): AppState {
         ],
       };
     case 'todo':
+      // One live checklist (Claude Code style): drop the previous todo block
+      // and append the fresh one, so it updates in place near the bottom
+      // instead of stacking a stale copy per update.
       return {
         ...state,
-        transcript: [...state.transcript, { kind: 'todo', text: formatTodoTranscript(ev.items) }],
+        transcript: [
+          ...state.transcript.filter((e) => e.kind !== 'todo'),
+          { kind: 'todo', text: formatTodoTranscript(ev.items) },
+        ],
       };
     case 'skill-active':
       return { ...state, activeSkill: ev.name };

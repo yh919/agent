@@ -766,6 +766,18 @@ export class Agent {
     return this.tokens.approxTokens() + this.tokens.toolsTokenEstimate(this.tools);
   }
 
+  /** /context: where the context budget goes (same ~4 chars/token estimate). */
+  contextBreakdown(): { system: number; tools: number; conversation: number; threshold: number } {
+    const total = this.tokens.approxTokens();
+    const system = Math.ceil((this.history[0]?.content.length ?? 0) / 4);
+    return {
+      system,
+      tools: this.tokens.toolsTokenEstimate(this.tools),
+      conversation: Math.max(0, total - system),
+      threshold: this.autoCompactThreshold,
+    };
+  }
+
   // ---------- session lifecycle ----------
 
   async reset(): Promise<void> {
