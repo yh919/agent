@@ -851,3 +851,14 @@ describe('formatCompactEvent', () => {
     );
   });
 });
+
+describe('state.reducer rewind', () => {
+  it('drops the picked user message and everything after it', () => {
+    let s = reducer(seed(), { type: 'append', entry: { kind: 'user', text: 'A' } });
+    s = reducer(s, { type: 'append', entry: { kind: 'assistant', text: 'a' } });
+    s = reducer(s, { type: 'append', entry: { kind: 'user', text: 'B' } });
+    s = reducer(s, { type: 'append', entry: { kind: 'assistant', text: 'b' } });
+    s = reducer(s, { type: 'rewind', index: 2 });
+    expect(s.transcript.map((e) => e.text)).toEqual(['A', 'a']);
+  });
+});

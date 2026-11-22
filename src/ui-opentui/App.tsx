@@ -58,6 +58,14 @@ import {
   readSystemClipboard,
 } from '../ui/clipboard.js';
 import { handleSlash } from '../ui/commands/index.js';
+import {
+  HISTORY_CAP,
+  appendHistory,
+  historyPath,
+  loadHistory,
+  searchHistory,
+} from '../ui/history.js';
+import { shortcutsPanel } from '../ui/shortcuts.js';
 import { filterSlash } from '../ui/slashItems.js';
 import type { TranscriptEntry, TranscriptFilter } from '../ui/state.js';
 import { initialState, reducer } from '../ui/state.js';
@@ -117,6 +125,7 @@ export function App({
   listJobs,
   resumeSummary,
   onExit,
+  historyFile = historyPath(),
 }: AppProps) {
   if (!onExit) throw new Error('OpenTUI App requires onExit from the CLI mount');
   const renderer = useRenderer();
@@ -160,19 +169,70 @@ export function App({
     (on: boolean) => {
       setYolo?.(on);
       setPermissionMode?.(on ? 'yolo' : 'ask');
+      setPermMode(on ? 'yolo' : 'ask');
       dispatch({ type: 'set-yolo', on });
     },
     [setYolo, setPermissionMode],
   );
 
+  // Permission tier shown in the footer chip; plan mode lives on the agent.
+  const [, setModeTick] = useState(0);
+  const lastEscAt = useRef(0);
+  const [permMode, setPermMode] = useState<'ask' | 'auto-safe' | 'yolo'>(
+    yoloInitial ? 'yolo' : 'ask',
+  );
   const applyPermissionModeCb = useCallback(
     (mode: 'ask' | 'auto-safe' | 'yolo') => {
+      setPermMode(mode);
       setPermissionMode?.(mode);
       setYolo?.(mode === 'yolo');
       dispatch({ type: 'set-yolo', on: mode === 'yolo' });
     },
     [setPermissionMode, setYolo],
   );
+
+  // Esc Esc: pick an earlier user message, rewind transcript + agent history
+  // to just before it, and put its text back in the prompt for editing.
+  const openRewindPicker = () => {
+    const users = state.transcript
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => entry.kind === 'user' && entry.text)
+      .reverse()
+      .slice(0, 9);
+    if (users.length === 0 || agent.isRunning()) return;
+    const label = (text: string, n: number) =>
+      `${n}. ${text.replace(/\s+/g, ' ').slice(0, Math.max(20, cols - 20))}`;
+    dispatch({
+      type: 'set-ask',
+      req: {
+        question: {
+          header: 'Rewind',
+          question: 'Edit an earlier message',
+          subtitle: 'Everything after it is dropped from the chat and from the model context',
+          options: users.map(({ entry }, i) => ({ label: label(entry.text ?? '', i + 1) })),
+        },
+        resolve: (picked) => {
+          dispatch({ type: 'set-ask', req: null });
+          const hit = users[Number.parseInt(picked, 10) - 1];
+          if (!hit) return;
+          const text = hit.entry.text ?? '';
+          const rewound = agent.rewindTo(expandPastedTextMarkers(text, pastedTextRef.current));
+          dispatch({ type: 'rewind', index: hit.index });
+          if (!rewound) {
+            dispatch({
+              type: 'append',
+              entry: {
+                kind: 'system',
+                text: 'that message is no longer in the model context (compacted) — the model still remembers what came after it',
+              },
+            });
+          }
+          input.setValue(text);
+        },
+        reject: () => dispatch({ type: 'set-ask', req: null }),
+      },
+    });
+  };
 
   const applyCompactMode = useCallback((on: boolean) => {
     dispatch({ type: 'set-compact-mode', on });
@@ -194,12 +254,24 @@ export function App({
     });
   }, []);
 
-  const historyRef = useRef<string[]>([]);
+  // Seeded once from disk (this project only); appended on every submit.
+  const [initialHistory] = useState(() =>
+    historyFile ? loadHistory(process.cwd(), historyFile) : [],
+  );
+  const historyRef = useRef<string[]>(initialHistory);
   const exitArmedAt = useRef(0);
   const [exitHint, setExitHint] = useState(false);
+  // Ref is the source of truth (bursty keys arrive before a re-render);
+  // state only drives the hint.
+  type Search = { q: string; idx: number | null } | null;
+  const searchRef = useRef<Search>(null);
+  const [search, setSearchState] = useState<Search>(null);
+  const setSearch = useCallback((v: Search) => {
+    searchRef.current = v;
+    setSearchState(v);
+  }, []);
   const historyDraft = useRef<string>('');
   const [historyIdx, setHistoryIdx] = useState<number | null>(null);
-  const HISTORY_CAP = 500;
   const pastedTextRef = useRef<Map<number, string>>(new Map());
   const pastedTextSeq = useRef(0);
 
@@ -426,10 +498,45 @@ export function App({
         if (h[h.length - 1] !== recorded) {
           h.push(recorded);
           if (h.length > HISTORY_CAP) h.shift();
+          if (historyFile) appendHistory(recorded, process.cwd(), historyFile);
         }
       }
       setHistoryIdx(null);
       historyDraft.current = '';
+
+      // `!cmd` → run it now through the shell tool + permission gate (no model
+      // call); output lands in context for the next turn, like Claude Code.
+      if (agentValue.startsWith('!') && agentValue.slice(1).trim()) {
+        if (agent.isRunning()) {
+          dispatch({
+            type: 'append',
+            entry: { kind: 'system', text: 'busy — wait for the turn to finish (Esc cancels)' },
+          });
+          return;
+        }
+        const command = agentValue.slice(1).trim();
+        const id = `bang-${Date.now()}`;
+        const args = { command };
+        const event = (ev: AgentEvent) => dispatch({ type: 'agent-event', event: ev });
+        event({ type: 'tool-call', id, name: 'shell', args, argsJSON: JSON.stringify(args) });
+        dispatch({ type: 'set-busy', busy: true });
+        const ctl = new AbortController();
+        runCtl.current = ctl;
+        const started = Date.now();
+        void agent.runUserShell(command, ctl.signal).then((result) => {
+          const err = result.startsWith('error: ') ? result.slice(7) : '';
+          event({
+            type: 'tool-result',
+            id,
+            name: 'shell',
+            result,
+            err,
+            durationMs: Date.now() - started,
+          });
+          dispatch({ type: 'set-busy', busy: false });
+        });
+        return;
+      }
 
       if (agentValue.startsWith('#')) {
         const personal = agentValue.startsWith('#!');
@@ -509,6 +616,7 @@ export function App({
       startBurpBridge,
       generateFindingsReport,
       listJobs,
+      historyFile,
     ],
   );
 
@@ -665,6 +773,54 @@ export function App({
     // 1. Modal overlays consume keys before us.
     if (secretInput || state.pendingPerm || state.pendingAsk || state.pendingSkills) return;
 
+    // 1b. Ctrl+R reverse history search (bash/Claude Code style). While
+    //     active it owns the keyboard; the draft shows the current match.
+    const search = searchRef.current;
+    if (search) {
+      const h = historyRef.current;
+      const show = (q: string, idx: number | null) => {
+        setSearch({ q, idx });
+        if (idx !== null) input.setValue(h[idx] ?? '');
+      };
+      if (e.name === 'escape' || (e.ctrl && e.name === 'g')) {
+        input.setValue(historyDraft.current);
+        setSearch(null);
+      } else if (e.ctrl && e.name === 'r') {
+        show(search.q, searchHistory(h, search.q, search.idx ?? h.length) ?? search.idx);
+      } else if (e.name === 'backspace') {
+        const q = search.q.slice(0, -1);
+        show(q, q ? searchHistory(h, q) : null);
+      } else if (
+        e.sequence &&
+        e.sequence.length === 1 &&
+        !e.ctrl &&
+        !e.meta &&
+        e.name !== 'return' &&
+        e.name !== 'tab'
+      ) {
+        const q = search.q + e.sequence;
+        show(q, searchHistory(h, q));
+      } else {
+        setSearch(null); // Enter / Tab / arrows: keep the match as the draft
+      }
+      return;
+    }
+    // Shift+Tab cycles ask → auto-safe → plan → ask. YOLO is deliberately not
+    // in the cycle: one stray keypress must never auto-approve shell commands.
+    if (e.name === 'tab' && e.shift) {
+      const cur = agent.isPlanMode() ? 'plan' : permMode;
+      const next = cur === 'ask' ? 'auto-safe' : cur === 'auto-safe' ? 'plan' : 'ask';
+      agent.setPlanMode(next === 'plan');
+      applyPermissionModeCb(next === 'auto-safe' ? 'auto-safe' : 'ask');
+      setModeTick((n) => n + 1); // plan lives on the agent; force the chip to re-read it
+      return;
+    }
+    if (e.ctrl && e.name === 'r') {
+      historyDraft.current = inputValue;
+      setSearch({ q: '', idx: null });
+      return;
+    }
+
     // 2. Global chords (expand / copy / paste / filter).
     if (e.ctrl && e.name === 'o') {
       dispatch({ type: 'expand-tool-output' });
@@ -796,7 +952,17 @@ export function App({
     // 5. Normal multi-line input editing — stays available while the agent
     //    runs so the prompt box never freezes on "planning…".
 
-    // 5a. Esc clears the draft when idle (busy Esc already aborted above).
+    // 5a. Esc clears the draft when idle (busy Esc already aborted above);
+    //     Esc Esc on an empty prompt opens "edit an earlier message".
+    if (e.name === 'escape' && inputValue.length === 0) {
+      if (Date.now() - lastEscAt.current < 600) {
+        lastEscAt.current = 0;
+        openRewindPicker();
+      } else {
+        lastEscAt.current = Date.now();
+      }
+      return;
+    }
     if (e.name === 'escape') {
       if (inputValue.length > 0) input.clear();
       if (historyIdx !== null) {
@@ -919,6 +1085,15 @@ export function App({
 
     // 5e. Other chords reserved (Cmd/Ctrl combos not handled above).
     if (e.ctrl || e.meta) return;
+
+    // 5e'. `?` on an empty prompt opens the shortcuts panel.
+    if (e.sequence === '?' && inputValue.length === 0) {
+      dispatch({
+        type: 'set-ask',
+        req: shortcutsPanel(() => dispatch({ type: 'set-ask', req: null })),
+      });
+      return;
+    }
 
     // 5f. Plain printable / unbracketed paste dump.
     // Terminal.app sometimes pastes without bracketed-paste markers as one
@@ -1098,6 +1273,13 @@ export function App({
               elapsedSeconds={elapsedSeconds}
               draftTokens={Math.floor(inputValue.length / 4)}
               maxWidth={chatWidth}
+              modeChip={
+                agent.isPlanMode()
+                  ? '⏸ plan mode · shift+tab'
+                  : permMode === 'auto-safe'
+                    ? '⏵⏵ auto-safe · shift+tab'
+                    : undefined
+              }
             />
             <Input
               key={inputEpoch}
@@ -1105,13 +1287,15 @@ export function App({
               cursor={input.cursor}
               width={chatWidth}
               hint={
-                exitHint
-                  ? 'Press Ctrl+C again to exit'
-                  : state.busy
-                    ? queueLen > 0
-                      ? `${queueLen} queued · Esc to cancel`
-                      : 'Esc to cancel'
-                    : undefined
+                search
+                  ? `search history: "${search.q}"${search.q && search.idx === null ? ' · no match' : ''} · Ctrl+R older · Enter use · Esc cancel`
+                  : exitHint
+                    ? 'Press Ctrl+C again to exit'
+                    : state.busy
+                      ? queueLen > 0
+                        ? `${queueLen} queued · Esc to cancel`
+                        : 'Esc to cancel'
+                      : undefined
               }
             />
           </box>

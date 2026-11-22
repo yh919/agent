@@ -53,4 +53,6 @@ export interface AppProps {
   resumeSummary?: string;
   /** OpenTUI: CLI destroys the renderer when the app requests exit. */
   onExit?: () => void;
+  /** Prompt-history JSONL (default ~/.lepus/agent/history.jsonl); null = in-memory only. */
+  historyFile?: string | null;
 }

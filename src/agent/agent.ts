@@ -490,6 +490,41 @@ export class Agent {
     return this.store.saveContextSnapshot(out.join('\n'));
   }
 
+  /**
+   * Esc Esc: drop the most recent user message equal to `userMsg` and
+   * everything after it, so it can be edited and resent. False when it's no
+   * longer in history (e.g. compacted away); history is then left untouched.
+   */
+  rewindTo(userMsg: string): boolean {
+    if (this.running) return false;
+    for (let i = this.history.length - 1; i > 0; i -= 1) {
+      const m = this.history[i];
+      if (m?.role === 'user' && m.content === userMsg) {
+        this.history = this.history.slice(0, i);
+        this.tokens.recompute(this.history);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * `!cmd` typed at the prompt: run one shell command through the normal
+   * tool registry + permission prompter (no model call), then record the
+   * command and its output in history so the next turn can use it.
+   */
+  async runUserShell(command: string, signal: AbortSignal): Promise<string> {
+    const out = await this.tools
+      .execute('shell', { command }, signal, this.prompter)
+      .catch((err: unknown) => `error: ${errMessage(err)}`);
+    this.history.push({
+      role: 'user',
+      content: `<user-shell-command>\n$ ${command}\n${out}\n</user-shell-command>`,
+    });
+    this.tokens.recompute(this.history);
+    return out;
+  }
+
   async coverageContext(signal: AbortSignal): Promise<string> {
     if (!this.tools.get('coverage')) return 'Coverage tool is not available in this session.';
     const summary = await this.tools

@@ -51,6 +51,7 @@ function makeProps(overrides: Partial<AppProps> = {}): AppProps {
     agent,
     bannerData,
     parentSignal: new AbortController().signal,
+    historyFile: null, // never touch the real ~/.lepus history from tests
     readConfig: () => ({ backend: 'ollama', baseURL: '', apiKey: '', model: 'stub-model' }),
     applyProvider,
     setYolo,

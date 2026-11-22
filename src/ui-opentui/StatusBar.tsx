@@ -37,20 +37,34 @@ function compactTarget(target: string): string {
 
 export interface OpenTuiStatusProps extends StatusProps {
   maxWidth?: number;
+  /** Right-aligned mode chip (Shift+Tab cycles it); falls back to YOLO. */
+  modeChip?: string;
+}
+
+function chipOf(props: OpenTuiStatusProps): string {
+  return props.modeChip ?? (props.yolo ? 'YOLO' : '');
 }
 
 export function StatusBar(props: OpenTuiStatusProps) {
   const maxWidth = props.maxWidth ?? 200;
   return (
-    <box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
+    // Explicit width: the footer centers its children, so '100%' collapsed to
+    // content width and the chip sat glued to the left text.
+    <box
+      style={{
+        flexDirection: 'row',
+        width: props.maxWidth ?? '100%',
+        justifyContent: 'space-between',
+      }}
+    >
       {props.busy ? (
         <BusyLine {...props} maxWidth={maxWidth} />
       ) : (
         <IdleLine {...props} maxWidth={maxWidth} />
       )}
-      {props.yolo ? (
-        <text fg={theme.superMode} attributes={TextAttributes.BOLD}>
-          YOLO
+      {chipOf(props) ? (
+        <text fg={props.yolo ? theme.superMode : theme.focus} attributes={TextAttributes.BOLD}>
+          {chipOf(props)}
         </text>
       ) : null}
     </box>
@@ -64,7 +78,10 @@ function BusyLine(props: OpenTuiStatusProps) {
   const primary =
     props.phase === 'running-tool' && props.runningTool ? props.runningTool : phaseText;
   const clock = props.elapsedSeconds ? ` ${formatElapsed(props.elapsedSeconds)}` : '';
-  const budget = Math.max(12, (props.maxWidth ?? 200) - (props.yolo ? 6 : 0));
+  const budget = Math.max(
+    12,
+    (props.maxWidth ?? 200) - (chipOf(props) ? chipOf(props).length + 2 : 0),
+  );
   let body = ` ${primary}${clock}`;
   if (body.length > budget - 1) body = `${body.slice(0, Math.max(0, budget - 2))}…`;
   return (
@@ -88,7 +105,10 @@ function IdleLine(props: OpenTuiStatusProps) {
   const draft = props.draftTokens ?? 0;
   const ctxLabel = formatCtxLabel(props.ctxTokens, props.compactThreshold, draft);
   const ctxPct = ctxFillPercent(props.ctxTokens + draft, props.compactThreshold);
-  const budget = Math.max(12, (props.maxWidth ?? 200) - (props.yolo ? 6 : 0));
+  const budget = Math.max(
+    12,
+    (props.maxWidth ?? 200) - (chipOf(props) ? chipOf(props).length + 2 : 0),
+  );
 
   // Keep the bar short. Only add fields that change what the user should do.
   const segs: Seg[] = [

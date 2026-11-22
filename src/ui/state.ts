@@ -144,6 +144,8 @@ export type Action =
       done: boolean;
     }
   | { type: 'clear' }
+  /** Esc Esc rewind: keep only entries before `index`. */
+  | { type: 'rewind'; index: number }
   | { type: 'agent-event'; event: AgentEvent };
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -293,6 +295,12 @@ export function reducer(state: AppState, action: Action): AppState {
       }
       return { ...state, transcript: [...state.transcript, nextEntry] };
     }
+    case 'rewind':
+      return {
+        ...state,
+        transcript: state.transcript.slice(0, Math.max(0, action.index)),
+        clearGen: state.clearGen + 1,
+      };
     case 'clear':
       // Reset the log and bump clearGen so the Static viewport remounts and
       // stops reprinting the cleared items. Prior output stays in the
