@@ -6,7 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- **Renamed PentesterFlow → Lepus.** Binary `lepus` (+ `lepus-browser-mcp`),
+  package `@lepus/agent`, env vars `LEPUS_*` (was `PENTESTERFLOW_*`), repo
+  `yh919/agent`, Lepus Red palette and mark. Data moves from `~/.pentesterflow`
+  (and `./.pentesterflow`) to `~/.lepus/agent` automatically on first run.
+
 ### Added
+
+- **Subscription providers** — `claude-code`, `codex`, `gemini-cli` backends
+  drive the signed-in local CLI (Claude / ChatGPT / Google plan), no API key.
 
 - **OpenTUI-only terminal UI** — full-width chat, app-owned scroll,
   click-to-expand tool output and subagent progress, calm status chrome.

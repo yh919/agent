@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe.skipIf(!sqliteAvailable)('createSqliteMemoryProvider', () => {
-  it('creates the DB file under .pentesterflow/memory-provider/', async () => {
+  it('creates the DB file under .lepus/agent/memory-provider/', async () => {
     const provider = await createSqliteMemoryProvider({ cwd });
     expect(provider).not.toBeNull();
     await provider?.close();

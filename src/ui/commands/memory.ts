@@ -152,7 +152,7 @@ export function handleMemory(ctx: SlashContext): void {
         kind: 'system',
         text: providerName
           ? `External memory provider: ${providerName} (active alongside built-in memory)`
-          : 'No external memory provider active. Set memory_provider in ~/.pentesterflow/config.json (currently: "sqlite" or "off").',
+          : 'No external memory provider active. Set memory_provider in ~/.lepus/agent/config.json (currently: "sqlite" or "off").',
       },
     });
     return;

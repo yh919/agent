@@ -1,20 +1,20 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="PentesterFlow" width="520" />
+<img src="assets/logo.png" alt="Lepus" width="160" />
 
 ### Human-in-the-loop Agentic AI CLI for penetration testers and bug hunters.
 
-PentesterFlow helps security engineers move through recon, enumeration,
+Lepus helps security engineers move through recon, enumeration,
 validation, evidence collection, and reporting while keeping the analyst in
 control.
 
 <br/>
 
-[![build](https://img.shields.io/github/actions/workflow/status/PentesterFlow/agent/ci.yml?branch=main&label=build&logo=github)](https://github.com/PentesterFlow/agent/actions)
-[![release](https://img.shields.io/github/v/release/PentesterFlow/agent?include_prereleases&logo=github)](https://github.com/PentesterFlow/agent/releases)
+[![build](https://img.shields.io/github/actions/workflow/status/yh919/agent/ci.yml?branch=main&label=build&logo=github)](https://github.com/yh919/agent/actions)
+[![release](https://img.shields.io/github/v/release/yh919/agent?include_prereleases&logo=github)](https://github.com/yh919/agent/releases)
 [![node](https://img.shields.io/badge/node-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![license: Apache--2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![stars](https://img.shields.io/github/stars/PentesterFlow/agent?style=social)](https://github.com/PentesterFlow/agent/stargazers)
+[![stars](https://img.shields.io/github/stars/yh919/agent?style=social)](https://github.com/yh919/agent/stargazers)
 
 **[Install](#install) · [Quickstart](#quickstart) · [Lifecycle](#pentest-lifecycle) · [Memory](#continuous-learning) · [Burp](#burp-integration) · [Security](#security-model)**
 
@@ -23,7 +23,7 @@ control.
 ---
 
 ```console
-$ pentesterflow
+$ lepus
 PF v0.3.0 · ollama · …/engagement
 
 › /target https://app.example.com
@@ -45,7 +45,7 @@ Ready · qwen3:14b · app.example.com
 
 ## Overview
 
-PentesterFlow is an open-source terminal assistant designed specifically for
+Lepus is an open-source terminal assistant designed specifically for
 authorized offensive-security work. It connects to local or hosted LLMs, plans
 against a scoped target, uses real pentesting tools, asks for approval before
 sensitive actions, remembers useful lessons across sessions, and writes
@@ -60,17 +60,17 @@ It is built around three ideas:
   future sessions without retraining the model or adding user-facing complexity.
 
 > [!WARNING]
-> Use PentesterFlow only on systems where you have explicit authorization. The
+> Use Lepus only on systems where you have explicit authorization. The
 > agent can run shell commands, make HTTP requests, edit files, and process
 > captured traffic after approval.
 
-## Why PentesterFlow
+## Why Lepus
 
 Current agentic AI systems often struggle with security-specific workflows,
 hallucinated findings, weak context retention, poor tool integration, and limited
-auditability. PentesterFlow addresses those gaps with:
+auditability. Lepus addresses those gaps with:
 
-| Challenge | PentesterFlow approach |
+| Challenge | Lepus approach |
 |---|---|
 | Generic AI workflows | Built-in pentest skills for recon, web vulns, SSRF, SSTI, JWT, GraphQL, race, takeover, Supabase, and deserialization. |
 | Hallucinated findings | `confirm_finding` should be used only after reproduction with request/response evidence. |
@@ -99,29 +99,29 @@ published SHA-256 checksum when available.
 
 ```sh
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/PentesterFlow/agent/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yh919/agent/main/install.sh | sh
 ```
 
 ```powershell
 # Windows PowerShell
-irm https://raw.githubusercontent.com/PentesterFlow/agent/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/yh919/agent/main/install.ps1 | iex
 ```
 
 Pin a release or choose an install directory:
 
 ```sh
-PENTESTERFLOW_VERSION=v0.1.6 PENTESTERFLOW_INSTALL_DIR="$HOME/.local/bin" \
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/PentesterFlow/agent/main/install.sh)"
+LEPUS_VERSION=v0.1.6 LEPUS_INSTALL_DIR="$HOME/.local/bin" \
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/yh919/agent/main/install.sh)"
 ```
 
 Download binaries directly from
-[GitHub Releases](https://github.com/PentesterFlow/agent/releases):
+[GitHub Releases](https://github.com/yh919/agent/releases):
 
 | OS | Assets |
 |---|---|
-| macOS | `pentesterflow-darwin-arm64`, `pentesterflow-darwin-x64` |
-| Linux | `pentesterflow-linux-arm64`, `pentesterflow-linux-x64` |
-| Windows | `pentesterflow-windows-x64.exe` |
+| macOS | `lepus-darwin-arm64`, `lepus-darwin-x64` |
+| Linux | `lepus-linux-arm64`, `lepus-linux-x64` |
+| Windows | `lepus-windows-x64.exe` |
 
 The x64 standalone binaries are built with Bun's baseline runtime for older
 x86_64 CPUs. They do not require AVX2.
@@ -131,7 +131,7 @@ x86_64 CPUs. They do not require AVX2.
 ```sh
 # Local model example
 ollama pull qwen2.5-coder:32b
-pentesterflow
+lepus
 ```
 
 Inside the CLI:
@@ -145,10 +145,10 @@ map the authenticated API surface and test for IDOR
 Resume a previous assessment:
 
 ```sh
-pentesterflow --resume <session-id>
+lepus --resume <session-id>
 ```
 
-On resume, PentesterFlow automatically shows a recap of the previous session's
+On resume, Lepus automatically shows a recap of the previous session's
 persistent memory so you can continue without manually reconstructing context.
 
 ## Providers
@@ -165,36 +165,36 @@ CLI examples:
 
 ```sh
 # Ollama
-pentesterflow --backend ollama --model qwen2.5-coder:32b
+lepus --backend ollama --model qwen2.5-coder:32b
 
 # LM Studio
-pentesterflow --backend lmstudio --model zai-org/glm-4.7-flash
+lepus --backend lmstudio --model zai-org/glm-4.7-flash
 
 # OpenAI-compatible endpoint
-pentesterflow --backend openai-compat \
+lepus --backend openai-compat \
   --base-url https://api.example.com/v1 \
   --api-key sk-...
 
 # Kimi
-MOONSHOT_API_KEY=sk-... pentesterflow --backend kimi --model kimi-k2.6
+MOONSHOT_API_KEY=sk-... lepus --backend kimi --model kimi-k2.6
 
 # Groq
-GROQ_API_KEY=gsk_... pentesterflow --backend groq --model openai/gpt-oss-20b
+GROQ_API_KEY=gsk_... lepus --backend groq --model openai/gpt-oss-20b
 
 # OpenRouter
-OPENROUTER_API_KEY=sk-or-... pentesterflow --backend openrouter --model openrouter/auto
+OPENROUTER_API_KEY=sk-or-... lepus --backend openrouter --model openrouter/auto
 
 # DeepSeek
-DEEPSEEK_API_KEY=sk-... pentesterflow --backend deepseek --model deepseek-v4-flash
+DEEPSEEK_API_KEY=sk-... lepus --backend deepseek --model deepseek-v4-flash
 
 # Gemini
-GEMINI_API_KEY=AIza... pentesterflow --backend gemini --model models/gemini-3.5-flash
+GEMINI_API_KEY=AIza... lepus --backend gemini --model models/gemini-3.5-flash
 
 # Anthropic
-ANTHROPIC_API_KEY=sk-ant-... pentesterflow --backend anthropic --model claude-opus-4-8
+ANTHROPIC_API_KEY=sk-ant-... lepus --backend anthropic --model claude-opus-4-8
 
 # Naraya (multi-vendor OpenAI-compatible router)
-NARAYA_API_KEY=sk-nry-... pentesterflow --backend naraya --model deepseek-v4-flash-naraya
+NARAYA_API_KEY=sk-nry-... lepus --backend naraya --model deepseek-v4-flash-naraya
 ```
 
 Notes:
@@ -207,7 +207,7 @@ Notes:
 
 ## Supported Providers and Models
 
-PentesterFlow talks to any OpenAI-compatible endpoint plus native Gemini and
+Lepus talks to any OpenAI-compatible endpoint plus native Gemini and
 Anthropic backends. Use `/provider` to configure interactively, or
 `--backend`/`--model` on the CLI. Hosted model lists are fetched live from each
 provider; the models below are the curated, recommended-first picks.
@@ -245,7 +245,7 @@ Model-specific handling:
 
 ## Pentest Lifecycle
 
-PentesterFlow is designed to assist across the full engagement:
+Lepus is designed to assist across the full engagement:
 
 1. **Scope**: set target URL, constraints, credentials, and authorization notes.
 2. **Recon**: discover hosts, endpoints, technologies, files, APIs, and exposed
@@ -262,7 +262,7 @@ PentesterFlow is designed to assist across the full engagement:
 
 ## Continuous Learning
 
-PentesterFlow includes a local Continuous Learning System. It improves future
+Lepus includes a local Continuous Learning System. It improves future
 sessions without retraining model weights and without requiring users to manage
 memory manually.
 
@@ -280,8 +280,8 @@ Where it stores memory:
 
 | Path | Purpose |
 |---|---|
-| `./.pentesterflow/intelligence/scenarios.jsonl` | Project-specific intelligence for the current engagement/workspace. |
-| `~/.pentesterflow/intelligence/scenarios.jsonl` | Personal reusable intelligence across future projects. |
+| `./.lepus/agent/intelligence/scenarios.jsonl` | Project-specific intelligence for the current engagement/workspace. |
+| `~/.lepus/agent/intelligence/scenarios.jsonl` | Personal reusable intelligence across future projects. |
 
 How it behaves:
 
@@ -296,11 +296,11 @@ time.
 
 ## Session Memory And Resume
 
-PentesterFlow saves sessions under `~/.pentesterflow/sessions/*.json`.
+Lepus saves sessions under `~/.lepus/agent/sessions/*.json`.
 
 ```sh
-ls -lt ~/.pentesterflow/sessions/*.json | head
-pentesterflow --resume <session-id>
+ls -lt ~/.lepus/agent/sessions/*.json | head
+lepus --resume <session-id>
 ```
 
 Session continuity includes:
@@ -309,7 +309,7 @@ Session continuity includes:
 - Persistent compacted memory.
 - Target state.
 - Resume recap on startup.
-- Context snapshots under `~/.pentesterflow/context/`.
+- Context snapshots under `~/.lepus/agent/context/`.
 - Five-minute automatic snapshots during active sessions.
 
 Useful commands:
@@ -332,8 +332,8 @@ this session and beyond — for example `#orders API is IDOR-prone on
 of the project.
 
 - Saved facts are durable, human-readable Markdown — one file per fact with
-  frontmatter — under `./.pentesterflow/memory/` (project) and
-  `~/.pentesterflow/memory/` (personal), with a generated `MEMORY.md` index.
+  frontmatter — under `./.lepus/agent/memory/` (project) and
+  `~/.lepus/agent/memory/` (personal), with a generated `MEMORY.md` index.
 - The fact catalog is pinned into the system prompt on **every** turn, so it
   survives compaction; the facts most relevant to the current turn are recalled
   in full automatically (you'll see a `recalled memory: …` line).
@@ -344,15 +344,15 @@ of the project.
 ## Burp Integration
 
 Use the companion
-[PentesterFlow Burp Integration](https://github.com/PentesterFlow/Burp-Integration)
+[Lepus Burp Integration](https://github.com/Lepus/Burp-Integration)
 tool to send selected Burp traffic into the CLI and import confirmed findings
 back into Burp.
 
-Start the local PentesterFlow listener:
+Start the local Lepus listener:
 
 ```sh
-pentesterflow --burp
-pentesterflow --burp 9999
+lepus --burp
+lepus --burp 9999
 ```
 
 From source:
@@ -361,9 +361,9 @@ From source:
 npm run dev -- --burp 9999
 ```
 
-The Burp/PentesterFlow bridge supports:
+The Burp/Lepus bridge supports:
 
-- Sending selected Burp requests into PentesterFlow.
+- Sending selected Burp requests into Lepus.
 - Queuing requests as scan tasks.
 - Importing confirmed findings back into Burp issues.
 - Preserving full raw requests for evidence and replay.
@@ -373,15 +373,15 @@ The default listener is `http://127.0.0.1:9999`.
 
 ## Browser Capture And MCP
 
-`pentesterflow --burp` starts a local ingest server for captured requests,
-endpoints, and browser snapshots. The companion `pentesterflow-browser-mcp`
+`lepus --burp` starts a local ingest server for captured requests,
+endpoints, and browser snapshots. The companion `lepus-browser-mcp`
 binary exposes the same capture data as an MCP server for compatible clients.
 
 ```json
 {
   "mcpServers": {
-    "pentesterflow-browser": {
-      "command": "pentesterflow-browser-mcp",
+    "lepus-browser": {
+      "command": "lepus-browser-mcp",
       "args": []
     }
   }
@@ -405,7 +405,7 @@ binary exposes the same capture data as an MCP server for compatible clients.
 | `/jobs` | List background shell jobs. |
 | `/snapshot` | Write a redacted context snapshot now. |
 | `/report [markdown\|sarif]` | Export all confirmed findings. |
-| `/burp [port]` | Start the local Burp/PentesterFlow bridge. |
+| `/burp [port]` | Start the local Burp/Lepus bridge. |
 | `/skills [enable\|disable\|new <name>]` | Manage or scaffold skills. |
 | `/maxsteps <n>` | Tool budget before quiet auto-continue (default 20). |
 | `/thinking on\|off` | Toggle visible reasoning guidance. |
@@ -425,7 +425,7 @@ binary exposes the same capture data as an MCP server for compatible clients.
 | `--skills <dirs>` | Load extra skill directories. |
 | `--resume <session-id>` | Resume a saved session and show recap. |
 | `--browser` | Enable Browser MCP tools for the current session. |
-| `--burp [port]` | Start the local Burp/PentesterFlow bridge. |
+| `--burp [port]` | Start the local Burp/Lepus bridge. |
 | `--browser-ingest [port]` | Deprecated alias for `--burp`. |
 | `--no-stream` | Disable streaming for providers with SSE/tool-call issues. |
 | `--yolo` | YOLO mode: auto-approve non-sensitive tool calls (alias: `--dangerously-skip-permissions`). |
@@ -474,8 +474,8 @@ constraints. Built-in skills include:
 Discovery order:
 
 1. Built-in `skills/`
-2. Project-local `./.pentesterflow/skills/`
-3. Personal `~/.pentesterflow/skills/`
+2. Project-local `./.lepus/agent/skills/`
+3. Personal `~/.lepus/agent/skills/`
 4. Directories passed with `--skills`
 
 Later entries win on name collisions.
@@ -527,31 +527,31 @@ Reports include:
 
 > **macOS Terminal.app:** drag-select text in the app, then **Cmd+C** (or wait for
 > auto-copy on mouse-up). **Cmd+V** pastes into the prompt. Apple Terminal ignores
-> OSC 52 clipboard escapes — PentesterFlow uses `pbcopy`/`pbpaste` instead.
+> OSC 52 clipboard escapes — Lepus uses `pbcopy`/`pbpaste` instead.
 
 ## Configuration And Data
 
 | Path | Contents |
 |---|---|
-| `~/.pentesterflow/config.json` | Backend, model, endpoint, and disabled-skill settings. |
-| `~/.pentesterflow/sessions/*.json` | Saved sessions for `--resume`. |
-| `~/.pentesterflow/context/*.md` | Redacted context snapshots. |
-| `./.pentesterflow/intelligence/scenarios.jsonl` | Project intelligence learned from this workspace. |
-| `~/.pentesterflow/intelligence/scenarios.jsonl` | Personal reusable intelligence across projects. |
-| `~/.pentesterflow/builtin-skills/<name>/SKILL.md` | Installer-managed shipped skills. |
-| `~/.pentesterflow/skills/<name>/SKILL.md` | Personal skills. |
-| `./.pentesterflow/skills/<name>/SKILL.md` | Project-local skills. |
+| `~/.lepus/agent/config.json` | Backend, model, endpoint, and disabled-skill settings. |
+| `~/.lepus/agent/sessions/*.json` | Saved sessions for `--resume`. |
+| `~/.lepus/agent/context/*.md` | Redacted context snapshots. |
+| `./.lepus/agent/intelligence/scenarios.jsonl` | Project intelligence learned from this workspace. |
+| `~/.lepus/agent/intelligence/scenarios.jsonl` | Personal reusable intelligence across projects. |
+| `~/.lepus/agent/builtin-skills/<name>/SKILL.md` | Installer-managed shipped skills. |
+| `~/.lepus/agent/skills/<name>/SKILL.md` | Personal skills. |
+| `./.lepus/agent/skills/<name>/SKILL.md` | Project-local skills. |
 | `./findings/<slug>.md` | Confirmed findings for the current engagement. |
 | `./findings/coverage-<session-id>.json` | Coverage state for endpoint/parameter/vulnerability-class testing. |
-| `~/.pentesterflow/logs/pentesterflow.log` | Structured JSON-lines logs. |
-| `~/.pentesterflow/debug/session-*.jsonl` | Opt-in full session debug logs. |
+| `~/.lepus/agent/logs/lepus.log` | Structured JSON-lines logs. |
+| `~/.lepus/agent/debug/session-*.jsonl` | Opt-in full session debug logs. |
 
 Enable complete debug logs when reproducing usage issues:
 
 ```sh
-pentesterflow --debug-session
-PENTESTERFLOW_DEBUG_SESSION=1 pentesterflow
-PENTESTERFLOW_DEBUG_SESSION=1 PENTESTERFLOW_DEBUG_SESSION_PATH=/tmp/pf-debug.jsonl pentesterflow
+lepus --debug-session
+LEPUS_DEBUG_SESSION=1 lepus
+LEPUS_DEBUG_SESSION=1 LEPUS_DEBUG_SESSION_PATH=/tmp/pf-debug.jsonl lepus
 ```
 
 Treat debug logs as sensitive because they can contain target data, command
@@ -585,8 +585,8 @@ skills should include a `SKILL.md` and pass the skill conformance tests.
 <div align="center">
 <br/>
 
-**[Report an issue](https://github.com/PentesterFlow/agent/issues)** ·
-**[Request a feature](https://github.com/PentesterFlow/agent/issues/new)** ·
-**[Releases](https://github.com/PentesterFlow/agent/releases)**
+**[Report an issue](https://github.com/yh919/agent/issues)** ·
+**[Request a feature](https://github.com/yh919/agent/issues/new)** ·
+**[Releases](https://github.com/yh919/agent/releases)**
 
 </div>

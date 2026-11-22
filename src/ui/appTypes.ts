@@ -18,7 +18,7 @@ export interface ProviderChange {
 }
 export type ApplyProvider = (change: ProviderChange) => Promise<void>;
 
-/** Persist a disabled-skills list change (writes ~/.pentesterflow/config.json). */
+/** Persist a disabled-skills list change (writes ~/.lepus/agent/config.json). */
 export type PersistDisabledSkills = (names: string[]) => Promise<void>;
 
 export interface AppProps {

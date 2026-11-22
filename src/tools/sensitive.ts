@@ -31,7 +31,7 @@ const HOME_RELATIVE = [
   '.config/gcloud',
   '.config/op',
   '.config/gh',
-  '.pentesterflow',
+  '.lepus',
   '.netrc',
   '.pgpass',
   '.npmrc',

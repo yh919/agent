@@ -2,7 +2,7 @@
 // rejection set matches and that a clean config round-trips through save
 // and load.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,6 +10,7 @@ import {
   defaultConfig,
   formatConfig,
   load,
+  migrateLegacyDirs,
   parseConfigText,
   save,
   stripJsonComments,
@@ -17,19 +18,19 @@ import {
 } from './config.js';
 
 let tmp = '';
-const originalEnv = process.env.PENTESTERFLOW_CONFIG;
+const originalEnv = process.env.LEPUS_CONFIG;
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'pf-config-'));
-  process.env.PENTESTERFLOW_CONFIG = join(tmp, 'config.json');
+  process.env.LEPUS_CONFIG = join(tmp, 'config.json');
 });
 
 afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
   if (originalEnv === undefined) {
-    process.env.PENTESTERFLOW_CONFIG = undefined;
+    process.env.LEPUS_CONFIG = undefined;
   } else {
-    process.env.PENTESTERFLOW_CONFIG = originalEnv;
+    process.env.LEPUS_CONFIG = originalEnv;
   }
 });
 
@@ -162,7 +163,7 @@ describe('config', () => {
     cfg.backend = 'ollama';
     await save(cfg);
     const { statSync } = await import('node:fs');
-    const mode = statSync(process.env.PENTESTERFLOW_CONFIG ?? '').mode & 0o777;
+    const mode = statSync(process.env.LEPUS_CONFIG ?? '').mode & 0o777;
     expect(mode).toBe(0o600);
   });
 
@@ -209,7 +210,7 @@ describe('config', () => {
     cfg.api_key = 'sk-ant';
     cfg.tooling_profile = 'full';
     await save(cfg);
-    const raw = readFileSync(process.env.PENTESTERFLOW_CONFIG ?? '', 'utf8');
+    const raw = readFileSync(process.env.LEPUS_CONFIG ?? '', 'utf8');
     expect(raw).toMatch(/^\{\n {2}"backend": "anthropic"/);
     expect(raw).not.toContain('"skills_dirs"');
     const reloaded = load();
@@ -219,7 +220,7 @@ describe('config', () => {
   });
 
   it('load accepts JSONC comments and $doc keys', () => {
-    const path = process.env.PENTESTERFLOW_CONFIG ?? '';
+    const path = process.env.LEPUS_CONFIG ?? '';
     writeFileSync(
       path,
       `{
@@ -249,8 +250,21 @@ describe('config', () => {
   });
 
   it('zod errors name the field on bad types', () => {
-    const path = process.env.PENTESTERFLOW_CONFIG ?? '';
+    const path = process.env.LEPUS_CONFIG ?? '';
     writeFileSync(path, '{ "max_steps": "nope" }\n', { mode: 0o600 });
     expect(() => load()).toThrow(/max_steps/);
+  });
+});
+
+describe('migrateLegacyDirs', () => {
+  it('moves .pentesterflow to .lepus/agent once and never overwrites', () => {
+    const base = mkdtempSync(join(tmpdir(), 'mig-'));
+    mkdirSync(join(base, '.pentesterflow'));
+    writeFileSync(join(base, '.pentesterflow', 'config.json'), '{}');
+    expect(migrateLegacyDirs([base])).toHaveLength(1);
+    expect(readFileSync(join(base, '.lepus', 'agent', 'config.json'), 'utf8')).toBe('{}');
+    expect(existsSync(join(base, '.pentesterflow'))).toBe(false);
+    mkdirSync(join(base, '.pentesterflow'));
+    expect(migrateLegacyDirs([base])).toHaveLength(0); // target exists: leave both alone
   });
 });

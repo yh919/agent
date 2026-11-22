@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "@pentesterflow/agent",
+      "name": "@lepus/agent",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.0.0",
         "@opentui/core": "^0.5.1",

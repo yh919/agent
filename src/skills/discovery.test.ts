@@ -8,18 +8,18 @@ describe('skillSearchDirs', () => {
     const dirs = skillSearchDirs(['/cfg/skills'], '/proj', '/home');
     expect(dirs).toEqual([
       '/proj/skills',
-      '/proj/.pentesterflow/skills',
-      '/home/.pentesterflow/builtin-skills',
-      '/home/.pentesterflow/skills',
+      '/proj/.lepus/agent/skills',
+      '/home/.lepus/agent/builtin-skills',
+      '/home/.lepus/agent/skills',
       '/cfg/skills',
     ]);
   });
 
   it('includes project-local, managed, and personal skill dirs', () => {
     const dirs = skillSearchDirs([], '/proj', '/home');
-    expect(dirs).toContain('/proj/.pentesterflow/skills');
-    expect(dirs).toContain('/home/.pentesterflow/builtin-skills');
-    expect(dirs).toContain('/home/.pentesterflow/skills');
+    expect(dirs).toContain('/proj/.lepus/agent/skills');
+    expect(dirs).toContain('/home/.lepus/agent/builtin-skills');
+    expect(dirs).toContain('/home/.lepus/agent/skills');
   });
 
   it('appends configured dirs last so they win on collision', () => {

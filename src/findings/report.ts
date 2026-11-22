@@ -78,7 +78,7 @@ export function renderSarifReport(findings: Finding[]): string {
       {
         tool: {
           driver: {
-            name: 'pentesterflow',
+            name: 'lepus',
             rules: [...rules.entries()].map(([id, r]) => ({
               id,
               name: r.title,

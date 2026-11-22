@@ -124,7 +124,7 @@ export class HTTPTool implements Tool {
       }
     }
     if (!headers.has('user-agent')) {
-      headers.set('user-agent', 'pentesterflow/0.1');
+      headers.set('user-agent', 'lepus/0.1');
     }
 
     const init: Parameters<typeof undiciFetch>[1] = {

@@ -81,14 +81,14 @@ describe('HonchoProvider', () => {
     const provider = createHonchoProvider({
       baseURL,
       workspaceId: 'ws2',
-      peerName: 'pentesterflow-bot',
+      peerName: 'lepus-bot',
     });
     await provider.record({
       role: 'assistant',
       content: 'done',
       createdAt: '2026-01-01T00:00:00.000Z',
     });
-    expect(lastBody).toEqual({ messages: [{ peer_id: 'pentesterflow-bot', content: 'done' }] });
+    expect(lastBody).toEqual({ messages: [{ peer_id: 'lepus-bot', content: 'done' }] });
   });
 
   it('omits the Authorization header when no key is configured', async () => {

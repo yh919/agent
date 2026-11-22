@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_REPO = 'PentesterFlow/agent';
+const DEFAULT_REPO = 'yh919/agent';
 const INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_BUFFER = 1024 * 1024;
 
@@ -17,25 +17,25 @@ export interface UpdateResult {
 }
 
 export async function runSelfUpdate(version = 'latest'): Promise<UpdateResult> {
-  const repo = process.env.PENTESTERFLOW_REPO || DEFAULT_REPO;
+  const repo = process.env.LEPUS_REPO || DEFAULT_REPO;
   assertRepoFormat(repo);
   if (repo !== DEFAULT_REPO) {
-    // PENTESTERFLOW_REPO is trusted for forking/testing, but raw.githubusercontent.com
+    // LEPUS_REPO is trusted for forking/testing, but raw.githubusercontent.com
     // serves any public repo — pinning the host alone doesn't stop an env var set by
     // a poisoned shell profile or shared CI runner from pointing /update at a
     // different, attacker-controlled repo. Surface the override loudly rather than
     // silently fetching-and-executing from wherever the environment says to.
     process.stderr.write(
-      `warning: PENTESTERFLOW_REPO overrides the update source to "${repo}" (default: ${DEFAULT_REPO}) — the installer script will be fetched and executed from this repo.\n`,
+      `warning: LEPUS_REPO overrides the update source to "${repo}" (default: ${DEFAULT_REPO}) — the installer script will be fetched and executed from this repo.\n`,
     );
   }
   const normalizedVersion = normalizeVersion(version);
   const installDir = detectInstallDir();
   const env = {
     ...process.env,
-    PENTESTERFLOW_REPO: repo,
-    ...(normalizedVersion === 'latest' ? {} : { PENTESTERFLOW_VERSION: normalizedVersion }),
-    ...(installDir ? { PENTESTERFLOW_INSTALL_DIR: installDir } : {}),
+    LEPUS_REPO: repo,
+    ...(normalizedVersion === 'latest' ? {} : { LEPUS_VERSION: normalizedVersion }),
+    ...(installDir ? { LEPUS_INSTALL_DIR: installDir } : {}),
   };
 
   // Pin the installer to the requested release tag (immutable git ref) instead
@@ -62,7 +62,7 @@ export async function runSelfUpdate(version = 'latest'): Promise<UpdateResult> {
  *  tricks that could change what raw.githubusercontent.com/${repo}/... resolves to. */
 function assertRepoFormat(repo: string): void {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
-    throw new Error(`invalid PENTESTERFLOW_REPO: ${repo}`);
+    throw new Error(`invalid LEPUS_REPO: ${repo}`);
   }
 }
 
@@ -73,9 +73,9 @@ function normalizeVersion(raw: string): string {
 }
 
 function detectInstallDir(): string | undefined {
-  if (process.env.PENTESTERFLOW_INSTALL_DIR) return process.env.PENTESTERFLOW_INSTALL_DIR;
+  if (process.env.LEPUS_INSTALL_DIR) return process.env.LEPUS_INSTALL_DIR;
   const exe = basename(process.execPath).toLowerCase();
-  if (exe === 'pentesterflow' || exe === 'pentesterflow.exe') return dirname(process.execPath);
+  if (exe === 'lepus' || exe === 'lepus.exe') return dirname(process.execPath);
   return undefined;
 }
 
@@ -86,7 +86,7 @@ async function runUnixInstaller(
 ): Promise<string> {
   const scriptURL = `https://raw.githubusercontent.com/${repo}/${ref}/install.sh`;
   const script = await fetchText(scriptURL);
-  const dir = await mkdtemp(join(tmpdir(), 'pentesterflow-update-'));
+  const dir = await mkdtemp(join(tmpdir(), 'lepus-update-'));
   const file = join(dir, 'install.sh');
   try {
     await writeFile(file, script, 'utf8');
@@ -135,7 +135,7 @@ async function runWindowsInstaller(
 
 /**
  * Reject an installer URL that isn't https on the expected githubusercontent
- * host. The script is fetched then executed, so a tampered PENTESTERFLOW_REPO
+ * host. The script is fetched then executed, so a tampered LEPUS_REPO
  * must not be able to redirect the fetch to an attacker scheme/host (L10). TLS
  * guards the bytes in flight; this guards the destination.
  */

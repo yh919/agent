@@ -29,7 +29,7 @@ export function createMem0Provider(opts: Mem0ProviderOptions = {}): MemoryProvid
     '',
   );
   const apiKey = opts.apiKey || process.env.MEM0_API_KEY || '';
-  const userId = opts.userId || 'pentesterflow';
+  const userId = opts.userId || 'lepus';
 
   return createHttpMemoryProvider({
     name: 'mem0',

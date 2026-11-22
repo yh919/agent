@@ -64,7 +64,7 @@ export async function createSqliteMemoryProvider(
   }
 
   const cwd = resolve(opts.cwd ?? process.cwd());
-  const dbPath = join(cwd, '.pentesterflow', 'memory-provider', 'store.db');
+  const dbPath = join(cwd, '.lepus', 'agent', 'memory-provider', 'store.db');
   mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 });
 
   let db: SqliteDatabase;

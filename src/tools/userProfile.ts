@@ -1,6 +1,6 @@
 // update_user_profile tool. Lets the agent autonomously save a durable note
 // about the OPERATOR — a communication-style signal, a standing preference,
-// an expectation — into ~/.pentesterflow/USER.md, alongside the explicit
+// an expectation — into ~/.lepus/agent/USER.md, alongside the explicit
 // /user add path a human can also use. Distinct from confirm_finding /
 // coverage: this writes through a callback (not a store directly) because
 // the write must also refresh the live system prompt (Agent.addUserProfileNote

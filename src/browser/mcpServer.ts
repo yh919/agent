@@ -1,18 +1,18 @@
-// pentesterflow-browser-mcp — standalone MCP stdio server that pairs with
-// the PentesterFlow Chrome extension companion.
+// lepus-browser-mcp — standalone MCP stdio server that pairs with
+// the Lepus Chrome extension companion.
 //
 // What this is, in one line: a small Node process you put in your MCP
 // client's mcp.json, that hosts a local ingest HTTP endpoint for the
 // browser extension AND re-exposes the captured traffic as MCP tools so
-// any MCP-aware client (Cursor, the pentesterflow agent itself, ...) can
+// any MCP-aware client (Cursor, the lepus agent itself, ...) can
 // read it the same way.
 //
 //   Cursor       ──┐
 //   other clients──┼── stdio MCP ──► this process ──► CaptureStore ◄── HTTP /ingest ──── Chrome extension
-//   pentesterflow─┘
+//   lepus─┘
 //
 // The ingest HTTP server binds 127.0.0.1 only and requires a per-process
-// token in X-Pentesterflow-Token.
+// token in X-Lepus-Token.
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -21,7 +21,7 @@ import * as logger from '../logger/logger.js';
 import { startIngestServer } from './server.js';
 import { CaptureStore } from './store.js';
 
-const SERVER_NAME = 'pentesterflow-browser';
+const SERVER_NAME = 'lepus-browser';
 const SERVER_VERSION = '0.1.0';
 const DEFAULT_PORT = 9999;
 
@@ -67,13 +67,13 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 function printHelp(): void {
   // Write help to stderr — stdout is reserved for MCP framing.
-  process.stderr.write(`pentesterflow-browser-mcp ${SERVER_VERSION}
+  process.stderr.write(`lepus-browser-mcp ${SERVER_VERSION}
 
-Standalone MCP stdio server that bridges the PentesterFlow Chrome extension
-to any MCP-aware client (Cursor, pentesterflow, ...).
+Standalone MCP stdio server that bridges the Lepus Chrome extension
+to any MCP-aware client (Cursor, lepus, ...).
 
 Usage:
-  pentesterflow-browser-mcp [flags]
+  lepus-browser-mcp [flags]
 
 Flags:
   --port <n>          ingest HTTP port (default ${DEFAULT_PORT}, 127.0.0.1 only)
@@ -84,8 +84,8 @@ Flags:
 In your MCP client's mcp.json:
   {
     "mcpServers": {
-      "pentesterflow-browser": {
-        "command": "pentesterflow-browser-mcp",
+      "lepus-browser": {
+        "command": "lepus-browser-mcp",
         "args": []
       }
     }
@@ -109,7 +109,7 @@ async function main(): Promise<number> {
     const handle = await startIngestServer({ store, port: args.port });
     ingestUrl = handle.url;
     process.stderr.write(
-      `[pentesterflow-browser-mcp] ingest listening at ${handle.url}/ingest\n[pentesterflow-browser-mcp] token: ${handle.token}\n[pentesterflow-browser-mcp] configure the Chrome extension with this base URL and token.\n`,
+      `[lepus-browser-mcp] ingest listening at ${handle.url}/ingest\n[lepus-browser-mcp] token: ${handle.token}\n[lepus-browser-mcp] configure the Chrome extension with this base URL and token.\n`,
     );
     const close = async () => {
       logger.info('browser-mcp shutdown');
@@ -123,7 +123,7 @@ async function main(): Promise<number> {
     });
   } catch (err) {
     process.stderr.write(
-      `[pentesterflow-browser-mcp] failed to start ingest server on :${args.port}: ${(err as Error).message}\n`,
+      `[lepus-browser-mcp] failed to start ingest server on :${args.port}: ${(err as Error).message}\n`,
     );
     return 1;
   }
@@ -137,7 +137,7 @@ async function main(): Promise<number> {
     {
       title: 'Browser capture: status',
       description:
-        'Show counts (requests / endpoints / snapshots) and last-activity time for traffic captured by the PentesterFlow Chrome extension. Call this first to confirm the extension is connected and forwarding.',
+        'Show counts (requests / endpoints / snapshots) and last-activity time for traffic captured by the Lepus Chrome extension. Call this first to confirm the extension is connected and forwarding.',
       inputSchema: {},
     },
     async () => {
@@ -313,7 +313,7 @@ main()
   .then((code) => process.exit(code))
   .catch((err: unknown) => {
     process.stderr.write(
-      `[pentesterflow-browser-mcp] fatal: ${err instanceof Error ? err.message : String(err)}\n`,
+      `[lepus-browser-mcp] fatal: ${err instanceof Error ? err.message : String(err)}\n`,
     );
     process.exit(1);
   });

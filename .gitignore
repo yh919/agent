@@ -39,7 +39,7 @@ force.pub
 /findings/
 /recon/
 /reports/
-/.pentesterflow/
+/.lepus/agent/
 bughunter-report-*.md
 results_*.txt
 results_*.json

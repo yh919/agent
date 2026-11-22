@@ -515,7 +515,7 @@ export function App({
   // card especially: long shell payloads used to push the box below the last
   // terminal row; we pin an exact footer strip and clamp the command body.
   const chatWidth = Math.max(20, cols);
-  // Mini PF monogram is 3 rows + margin; compact is one line.
+  // Mini Lepus mark is 3 rows + margin; compact is one line.
   const bannerHeight = state.compactMode ? 2 : 4;
   const inputLines = Math.max(1, inputValue.split('\n').length);
   const extraInputLines = Math.max(0, inputLines - 1);

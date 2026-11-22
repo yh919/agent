@@ -4,6 +4,7 @@
 
 // MUST be first — sets FORCE_COLOR before chalk-consuming modules
 // (cli-highlight, etc.) cache their color level.
+import { CLI_BACKENDS, isCliBackend } from '../llm/cliclient.js';
 import './forceColor.js';
 
 import { randomBytes } from 'node:crypto';
@@ -131,8 +132,8 @@ function parseFlags(argv: string[]): ParsedFlags {
     burpPort: 9999,
     noStream: false,
     logPath: '',
-    debugSession: process.env.PENTESTERFLOW_DEBUG_SESSION === '1',
-    debugSessionPath: process.env.PENTESTERFLOW_DEBUG_SESSION_PATH ?? '',
+    debugSession: process.env.LEPUS_DEBUG_SESSION === '1',
+    debugSessionPath: process.env.LEPUS_DEBUG_SESSION_PATH ?? '',
     listSkills: false,
     listTools: false,
   };
@@ -229,6 +230,7 @@ async function main(): Promise<number> {
     return 0;
   }
 
+  for (const m of config.migrateLegacyDirs()) process.stderr.write(`moved ${m}\n`);
   logger.init(flags.logPath);
   logger.info('startup', { version: VERSION, pid: process.pid });
 
@@ -372,7 +374,7 @@ async function main(): Promise<number> {
     process.stderr.write(
       `No API key for the '${cfg.backend}' backend.
   • set it for this shell:  export ${envVar}=<your-key>
-  • or pass it once:        pentesterflow --api-key <your-key>
+  • or pass it once:        lepus --api-key <your-key>
   • or configure it in the TUI with /provider
 `,
     );
@@ -413,7 +415,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     return 1;
   }
 
-  // Skills: walk built-in + project-local (.pentesterflow/skills) + user dirs.
+  // Skills: walk built-in + project-local (.lepus/agent/skills) + user dirs.
   const skills = new SkillRegistry();
   const allSkillDirs = skillSearchDirs(cfg.skills_dirs);
   for (const d of allSkillDirs) skills.loadDir(d);
@@ -506,10 +508,10 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
   // `#`-saved fact stays in context for the rest of the session and beyond.
   const memoryStore = new MemoryStore();
   // Operator-authored engagement notes (scope/rules/creds). Read once at
-  // startup from project + home .pentesterflow/engagement.md; always injected
+  // startup from project + home .lepus/agent/engagement.md; always injected
   // into the system prompt so it survives compaction unconditionally.
   const engagement = new EngagementStore().load();
-  // What the agent has learned about the operator (~/.pentesterflow/USER.md):
+  // What the agent has learned about the operator (~/.lepus/agent/USER.md):
   // communication style, standing preferences, expectations. Always injected
   // into the system prompt, like engagement notes; the agent can append to it
   // autonomously via update_user_profile as well as through /user add.
@@ -730,7 +732,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     try {
       const result = await startBurpBridge(flags.burpPort);
       process.stderr.write(
-        `PentesterFlow Burp bridge listening at ${result.url}\nPentesterFlow Burp bridge token: ${result.token}\nSet both values in the Burp plugin.\n`,
+        `Lepus Burp bridge listening at ${result.url}\nLepus Burp bridge token: ${result.token}\nSet both values in the Burp plugin.\n`,
       );
     } catch (err) {
       process.stderr.write(
@@ -799,7 +801,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
 
   // First-run setup. Asked exactly once, before the agent is built (so
   // the system prompt is constructed with the chosen profile). The
-  // answer persists in ~/.pentesterflow/config.json so subsequent
+  // answer persists in ~/.lepus/agent/config.json so subsequent
   // launches skip this step.
   if (cfg.tooling_profile === undefined) {
     const picked = await runFirstRunPicker();
@@ -906,7 +908,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
   for (const d of skillDirsToWatch) watchDir(d);
 
   // When the user scaffolds a skill via `/skills new`, its dir (e.g.
-  // ./.pentesterflow/skills) may not have existed at startup, so it wasn't being
+  // ./.lepus/agent/skills) may not have existed at startup, so it wasn't being
   // watched. Add it to the reload walk + a watcher so subsequent edits
   // hot-reload like any other skill.
   const onSkillCreated = (skillRootDir: string): void => {
@@ -1188,11 +1190,12 @@ function providerLabel(b: string): string {
     case 'dahl':
       return 'Dahl';
     default:
-      return b;
+      return isCliBackend(b) ? CLI_BACKENDS[b].label : b;
   }
 }
 
 function localityFor(b: string): string {
+  if (isCliBackend(b)) return 'remote';
   if (isOpenAISchemeProvider(b)) return 'remote';
   return b === 'openai' ||
     b === 'openai-compat' ||
@@ -1267,7 +1270,7 @@ function buildResumeSummary(sessionID: string, memory: string): string {
 }
 
 function buildExitResumeHint(sessionID: string): string {
-  return `Resume this session: pentesterflow --resume ${sessionID}`;
+  return `Resume this session: lepus --resume ${sessionID}`;
 }
 
 function prettyCwd(): string {
@@ -1388,20 +1391,21 @@ async function runFirstRunPickerOpenTui(): Promise<config.ToolingProfile | null>
 }
 
 function printHelp(): void {
-  process.stdout.write(`pentesterflow ${VERSION}
+  process.stdout.write(`lepus ${VERSION}
 
 Usage:
-  pentesterflow [flags]
+  lepus [flags]
 
 Flags:
   --backend ollama|lmstudio|openai|openai-compat|kimi|groq|openrouter|deepseek|gemini|anthropic|naraya|dahl
+                             |claude-code|codex|gemini-cli (signed-in CLI, no key)
   --model <id>
   --base-url <url>
   --api-key <key>            visible to other local users via ps/procfs; prefer env var or /provider
   --skills <dirs>            comma-separated extra skill directories
   --resume <session-id>
   --browser                  enable Browser MCP for this session only (not persisted)
-  --burp [port]              start local Burp/PentesterFlow bridge (default :9999)
+  --burp [port]              start local Burp/Lepus bridge (default :9999)
   --browser-ingest [port]    deprecated alias for --burp
   --no-stream                disable streaming chat (fallback for backends
                              whose SSE/ND-JSON path drops tool_calls)
@@ -1424,6 +1428,8 @@ API keys (hosted backends) — set via flag, /provider in the TUI, or env var:
   naraya      NARAYA_API_KEY
   dahl        DAHL_API_KEY
   (ollama / lmstudio run locally and need no key)
+  claude-code · codex · gemini-cli use your signed-in Claude / ChatGPT /
+  Google plan via the local CLI (claude auth login · codex login · gemini)
 
 Backends: ollama · lmstudio · openai · openai-compat · kimi · groq ·
   openrouter · deepseek · gemini · anthropic · naraya · dahl

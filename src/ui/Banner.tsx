@@ -1,7 +1,8 @@
-// Banner: PF logo, connection metadata, and helpers.
+// Banner: Lepus mark, connection metadata, and helpers.
 
-export const PF_MINI_LOGO = ['█▀█', '█▀▀', '▀  '];
-export const PF_MINI_LOGO_WIDTH = 3;
+// Lepus mark (peak on a rounded base), 3 cells wide.
+export const MINI_LOGO = ['▗█▖', '▟█▙', '▀▀▀'];
+export const MINI_LOGO_WIDTH = 3;
 
 export type ToolSupportPill = 'yes' | 'no' | 'unknown' | 'probing';
 

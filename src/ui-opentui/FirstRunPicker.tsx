@@ -79,7 +79,7 @@ export function FirstRunPicker({ onPick, onCancel }: FirstRunPickerProps) {
           {theme.glyphs.brand}{' '}
         </text>
         <text fg={theme.brand} attributes={TextAttributes.BOLD}>
-          PentesterFlow
+          Lepus
         </text>
         <text fg={theme.muted}> · setup</text>
       </box>

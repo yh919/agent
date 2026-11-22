@@ -39,7 +39,7 @@ describe('FirstRunPicker rendering', () => {
   it('renders both tooling profile options with the minimal one selected by default', async () => {
     const setup = await renderModal(<FirstRunPicker onPick={vi.fn()} onCancel={vi.fn()} />);
     const frame = setup.captureCharFrame();
-    expect(frame).toContain('PentesterFlow');
+    expect(frame).toContain('Lepus');
     expect(frame).toContain('setup');
     expect(frame).toContain('TOOLING PROFILE');
     expect(frame).toContain('curl + Unix tools only');

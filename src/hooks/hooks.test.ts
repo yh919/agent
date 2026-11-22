@@ -92,13 +92,13 @@ describe('runToolHooks', () => {
     expect(result.blocked).toBe(true);
   });
 
-  it('passes context as PENTESTERFLOW_HOOK_* env vars', async () => {
+  it('passes context as LEPUS_HOOK_* env vars', async () => {
     const h = hook({
       event: 'pre-tool-call',
       command: node,
       args: [
         '-e',
-        'if (process.env.PENTESTERFLOW_HOOK_TOOL !== "shell") { process.exit(1); } process.exit(0);',
+        'if (process.env.LEPUS_HOOK_TOOL !== "shell") { process.exit(1); } process.exit(0);',
       ],
     });
     const result = await runToolHooks(

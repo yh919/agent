@@ -3,6 +3,7 @@
 // "prompt for an API key, then fetch its model list" flow.
 
 import type { Backend } from '../../config/config.js';
+import { CLI_BACKENDS, type CliBackend, cliInstalled, isCliBackend } from '../../llm/cliclient.js';
 import { listModels } from '../../llm/models.js';
 import {
   OPENAI_SCHEME_PROVIDERS,
@@ -200,7 +201,7 @@ function backendLabel(backend: Backend): string {
     case 'dahl':
       return 'Dahl';
     default:
-      return backend;
+      return isCliBackend(backend) ? CLI_BACKENDS[backend].label : backend;
   }
 }
 
@@ -258,6 +259,25 @@ function openProviderPicker(
           label: withCurrent('LM Studio', cur.backend === 'lmstudio'),
           badge: 'Local',
           description: 'localhost · OpenAI-compatible',
+        },
+        // —— Subscription (signed-in CLIs) ————————————————————————
+        {
+          group: 'Subscription',
+          label: withCurrent(CLI_BACKENDS['claude-code'].label, cur.backend === 'claude-code'),
+          badge: cliInstalled('claude-code') ? 'Signed-in CLI' : 'Not installed',
+          description: 'local `claude` CLI · Claude plan · no API key',
+        },
+        {
+          group: 'Subscription',
+          label: withCurrent(CLI_BACKENDS.codex.label, cur.backend === 'codex'),
+          badge: cliInstalled('codex') ? 'Signed-in CLI' : 'Not installed',
+          description: 'local `codex` CLI · ChatGPT plan · no API key',
+        },
+        {
+          group: 'Subscription',
+          label: withCurrent(CLI_BACKENDS['gemini-cli'].label, cur.backend === 'gemini-cli'),
+          badge: cliInstalled('gemini-cli') ? 'Signed-in CLI' : 'Not installed',
+          description: 'local `gemini` CLI · Google account · no API key',
         },
         // —— Hosted ——————————————————————————————————————————————
         {
@@ -361,6 +381,19 @@ function openProviderPicker(
       }
       // Match longer / more specific labels first: "OpenAI-compatible" must not
       // be classified as official "OpenAI". Use `name` (current suffix stripped).
+      // Subscription CLIs: no key, no endpoint — pick a model and go.
+      const cli = (Object.keys(CLI_BACKENDS) as CliBackend[]).find(
+        (b) => name === CLI_BACKENDS[b].label,
+      );
+      if (cli) {
+        void fetchAndPickModel(cli, '', '', dispatch, applyProvider, {
+          customModels: readConfig().customModels,
+          promptSecret,
+          successText: (picked) =>
+            `provider set to ${CLI_BACKENDS[cli].label} · model ${picked} (sign in once with \`${CLI_BACKENDS[cli].login}\`)`,
+        });
+        return;
+      }
       const backend: Backend = name.startsWith('Ollama')
         ? 'ollama'
         : name.startsWith('LM Studio')
@@ -405,7 +438,7 @@ function openProviderPicker(
         void promptSecret({
           header: 'OpenAI API',
           question: 'Enter your API key',
-          subtitle: 'Env  OPENAI_API_KEY  ·  stored in ~/.pentesterflow/config.json',
+          subtitle: 'Env  OPENAI_API_KEY  ·  stored in ~/.lepus/agent/config.json',
           placeholder: 'sk-…',
         })
           .then((apiKey) => {

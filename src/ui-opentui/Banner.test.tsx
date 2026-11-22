@@ -25,7 +25,7 @@ describe('Banner helpers (re-exported from ../ui/Banner.js)', () => {
   });
   it('ellipsize + compactPath still work', () => {
     expect(ellipsize('abcdefghij', 5)).toContain('…');
-    expect(compactPath('~/Research/pentesterflow-ink', 20)).toBe('…/pentesterflow-ink');
+    expect(compactPath('~/Research/lepus-workspace', 20)).toBe('…/lepus-workspace');
   });
 });
 
@@ -43,10 +43,10 @@ async function renderFrame(node: Parameters<typeof testRender>[0], width = 80): 
 }
 
 describe('Banner', () => {
-  it('renders a small mini PF monogram plus meta', async () => {
+  it('renders the Lepus mark plus meta', async () => {
     const frame = await renderFrame(<Banner data={base} width={80} />, 80);
-    expect(frame).toContain('█▀█');
-    expect(frame).toContain('PentesterFlow');
+    expect(frame).toContain('▟█▙');
+    expect(frame).toContain('Lepus');
     expect(frame).toContain('v0.1.0-dev');
     expect(frame).toContain('ollama');
     expect(frame).toContain('~/Research/target');
@@ -56,7 +56,7 @@ describe('Banner', () => {
 
   it('compact mode stays a single quiet line', async () => {
     const frame = await renderFrame(<Banner data={base} width={80} compact />, 80);
-    expect(frame).toContain('PF');
+    expect(frame).toContain('Lepus');
     expect(frame).toContain('v0.1.0-dev');
   });
 

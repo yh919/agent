@@ -36,14 +36,14 @@ export const SLASH_ITEMS: SlashItem[] = [
   {
     name: '/user',
     args: '[add <text>|clear]',
-    description: 'view/add/clear what the agent has learned about you (~/.pentesterflow/USER.md)',
+    description: 'view/add/clear what the agent has learned about you (~/.lepus/agent/USER.md)',
   },
   {
     name: '/report',
     args: '[markdown|sarif]',
     description: 'export all confirmed findings to one report file (default markdown)',
   },
-  { name: '/burp', args: '[port]', description: 'start the local Burp/PentesterFlow listener' },
+  { name: '/burp', args: '[port]', description: 'start the local Burp/Lepus listener' },
   { name: '/jobs', description: 'list background shell jobs (running / finished)' },
   { name: '/clear', description: 'clear the on-screen transcript only' },
   { name: '/reset', description: 'clear conversation + saved session' },
@@ -82,7 +82,7 @@ export const SLASH_ITEMS: SlashItem[] = [
     args: '[on|off]',
     description: 'toggle tighter transcript spacing (no blank lines between entries)',
   },
-  { name: '/exit', description: 'quit pentesterflow' },
+  { name: '/exit', description: 'quit lepus' },
 ];
 
 /**

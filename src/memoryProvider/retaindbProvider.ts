@@ -28,8 +28,8 @@ export function createRetainDBProvider(opts: RetainDBProviderOptions = {}): Memo
     'https://api.retaindb.com'
   ).replace(/\/$/, '');
   const apiKey = opts.apiKey || process.env.RETAINDB_API_KEY || '';
-  const project = opts.project || 'pentesterflow';
-  const userId = opts.userId || 'pentesterflow-agent';
+  const project = opts.project || 'lepus';
+  const userId = opts.userId || 'lepus-agent';
 
   return createHttpMemoryProvider({
     name: 'retaindb',

@@ -1,11 +1,11 @@
 /** @jsxImportSource @opentui/react */
-// Header: compact mini "PF" monogram + quiet meta (version · provider · path).
+// Header: compact "Lepus" wordmark / mini mark + quiet meta (version · provider · path).
 
 import { TextAttributes } from '@opentui/core';
 import {
   type BannerData,
-  PF_MINI_LOGO,
-  PF_MINI_LOGO_WIDTH,
+  MINI_LOGO,
+  MINI_LOGO_WIDTH,
   compactPath,
   modelPill,
 } from '../ui/Banner.js';
@@ -29,7 +29,7 @@ export function Banner({
   const pill = modelPill(data.toolSupport);
   const warnPill =
     pill && (data.toolSupport === 'no' || data.toolSupport === 'probing') ? pill : null;
-  const textBudget = Math.max(12, boxWidth - PF_MINI_LOGO_WIDTH - 3);
+  const textBudget = Math.max(12, boxWidth - MINI_LOGO_WIDTH - 3);
   const path = compactPath(data.cwd, Math.max(12, Math.floor(textBudget * 0.55)));
 
   // Ultra-compact: single brand glyph + meta.
@@ -44,7 +44,7 @@ export function Banner({
         }}
       >
         <text fg={theme.brand} attributes={TextAttributes.BOLD}>
-          PF
+          Lepus
         </text>
         <text fg={theme.muted} attributes={TextAttributes.DIM}>
           {' '}
@@ -74,7 +74,7 @@ export function Banner({
       }}
     >
       <box style={{ flexDirection: 'column', flexShrink: 0 }}>
-        {PF_MINI_LOGO.map((row) => (
+        {MINI_LOGO.map((row) => (
           <text key={row} fg={theme.brand} attributes={TextAttributes.BOLD}>
             {row}
           </text>
@@ -82,7 +82,7 @@ export function Banner({
       </box>
       <box style={{ flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
-          PentesterFlow
+          Lepus
         </text>
         <text fg={theme.muted} attributes={TextAttributes.DIM}>
           {clip(metaLine1)}

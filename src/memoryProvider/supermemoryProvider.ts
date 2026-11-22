@@ -31,7 +31,7 @@ export function createSupermemoryProvider(opts: SupermemoryProviderOptions = {})
     'https://api.supermemory.ai'
   ).replace(/\/$/, '');
   const apiKey = opts.apiKey || process.env.SUPERMEMORY_API_KEY || '';
-  const containerTag = opts.containerTag || 'pentesterflow';
+  const containerTag = opts.containerTag || 'lepus';
 
   return createHttpMemoryProvider({
     name: 'supermemory',

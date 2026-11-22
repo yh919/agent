@@ -1,4 +1,4 @@
-// Config file at ~/.pentesterflow/config.json (override with PENTESTERFLOW_CONFIG).
+// Config file at ~/.lepus/agent/config.json (override with LEPUS_CONFIG).
 //
 // Design goals for the on-disk format:
 //   • Human-readable — stable key order, 2-space indent, trailing newline.
@@ -12,7 +12,7 @@
 // Loaded once at startup; later /provider and /model mutations call save().
 
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs';
 import { chmod, open, rename, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -36,6 +36,10 @@ const Backend = z.enum([
   'anthropic',
   'naraya',
   'dahl',
+  // Subscription CLIs (see llm/cliclient.ts)
+  'claude-code',
+  'codex',
+  'gemini-cli',
   // OpenCode plugin/provider list (OpenAI Chat Completions scheme)
   'xai',
   'mistral',
@@ -70,6 +74,9 @@ export const BACKENDS: readonly Exclude<Backend, ''>[] = [
   'anthropic',
   'naraya',
   'dahl',
+  'claude-code',
+  'codex',
+  'gemini-cli',
   'xai',
   'mistral',
   'cerebras',
@@ -259,11 +266,34 @@ function noShellMeta(s: string): boolean {
 
 // ---------- Paths ----------
 
+/**
+ * One-time move from the PentesterFlow-era layout: <base>/.pentesterflow →
+ * <base>/.lepus/agent, for the home dir and the project dir. Skips when the
+ * new dir already exists so nothing is ever overwritten. Returns what moved.
+ * Must run before anything (e.g. the logger) creates the new dir.
+ */
+export function migrateLegacyDirs(bases: string[] = [homedir(), process.cwd()]): string[] {
+  const moved: string[] = [];
+  for (const base of new Set(bases)) {
+    const from = join(base, '.pentesterflow');
+    const to = join(base, '.lepus', 'agent');
+    if (!existsSync(from) || existsSync(to)) continue;
+    try {
+      mkdirSync(dirname(to), { recursive: true });
+      renameSync(from, to);
+      moved.push(`${from} → ${to}`);
+    } catch {
+      /* best-effort; the old dir stays put and the user can move it */
+    }
+  }
+  return moved;
+}
+
 export function configPath(): string {
-  const override = process.env.PENTESTERFLOW_CONFIG;
+  const override = process.env.LEPUS_CONFIG;
   if (override && override.length > 0) return override;
   const home = homedir();
-  return join(home, '.pentesterflow', 'config.json');
+  return join(home, '.lepus', 'agent', 'config.json');
 }
 
 // ---------- Load / save ----------
@@ -335,7 +365,7 @@ export async function save(cfg: Config): Promise<void> {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   const body = formatConfig(cfg);
-  const tmp = join(dir, `.pentesterflow.cfg.tmp.${randomBytes(3).toString('hex')}`);
+  const tmp = join(dir, `.lepus.cfg.tmp.${randomBytes(3).toString('hex')}`);
 
   let fh: Awaited<ReturnType<typeof open>> | undefined;
   try {
@@ -530,7 +560,7 @@ export function defaultConfig(): Config {
 
 /**
  * Example skeleton for docs / first-run guidance. Not written automatically —
- * operators can copy it into ~/.pentesterflow/config.json and fill values.
+ * operators can copy it into ~/.lepus/agent/config.json and fill values.
  */
 export const EXAMPLE_CONFIG_JSON = `{
   // LLM provider — ollama | lmstudio | openai | openai-compat | kimi | groq |

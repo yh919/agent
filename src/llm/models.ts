@@ -4,6 +4,7 @@
 // Anthropic.
 
 import type { Backend } from '../config/config.js';
+import { CLI_BACKENDS, isCliBackend } from './cliclient.js';
 import {
   getOpenAISchemeProvider,
   isOpenAISchemeProvider,
@@ -76,6 +77,8 @@ export async function listModels(
   signal?: AbortSignal,
 ): Promise<string[]> {
   const b: Exclude<Backend, ''> = backend === '' ? 'ollama' : backend;
+  // Subscription CLIs have no list endpoint; 'default' = the CLI's own default model.
+  if (isCliBackend(b)) return ['default', ...CLI_BACKENDS[b].models];
   const base = baseURL || defaultBaseURL(b);
   if (!base) throw new Error(`${b} backend requires a base URL`);
 

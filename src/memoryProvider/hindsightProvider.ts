@@ -29,7 +29,7 @@ export function createHindsightProvider(opts: HindsightProviderOptions = {}): Me
     'https://hindsight.vectorize.io'
   ).replace(/\/$/, '');
   const apiKey = opts.apiKey || process.env.HINDSIGHT_API_KEY || '';
-  const bankId = opts.bankId || 'pentesterflow';
+  const bankId = opts.bankId || 'lepus';
   const bankURL = `${baseURL}/v1/default/banks/${encodeURIComponent(bankId)}`;
 
   return createHttpMemoryProvider({

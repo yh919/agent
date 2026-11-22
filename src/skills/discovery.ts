@@ -1,7 +1,7 @@
 // Skill discovery directories. Extracted from the CLI so the precedence
-// order is unit-testable. We read the PROJECT-local ./.pentesterflow/skills
+// order is unit-testable. We read the PROJECT-local ./.lepus/agent/skills
 // (it's about the repo you're in, so sharing it is deliberate) and
-// ~/.pentesterflow/skills for personal pentesterflow skills.
+// ~/.lepus/agent/skills for personal lepus skills.
 
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -25,9 +25,9 @@ export function skillSearchDirs(
 ): string[] {
   return [
     resolve(cwd, 'skills'), // built-in
-    resolve(cwd, '.pentesterflow', 'skills'), // project-local (repo-scoped)
-    join(home, '.pentesterflow', 'builtin-skills'), // installer-managed shipped skills
-    join(home, '.pentesterflow', 'skills'), // personal pentesterflow skills
+    resolve(cwd, '.lepus', 'agent', 'skills'), // project-local (repo-scoped)
+    join(home, '.lepus', 'agent', 'builtin-skills'), // installer-managed shipped skills
+    join(home, '.lepus', 'agent', 'skills'), // personal lepus skills
     ...configured.map((d) => resolve(d)), // explicit --skills / config (wins)
   ];
 }

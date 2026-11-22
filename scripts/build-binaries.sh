@@ -14,10 +14,10 @@ fi
 mkdir -p dist-bin
 
 TARGETS=(
-  "bun-darwin-arm64:pentesterflow-darwin-arm64"
-  "bun-darwin-x64-baseline:pentesterflow-darwin-x64"
-  "bun-linux-x64-baseline:pentesterflow-linux-x64"
-  "bun-linux-arm64:pentesterflow-linux-arm64"
+  "bun-darwin-arm64:lepus-darwin-arm64"
+  "bun-darwin-x64-baseline:lepus-darwin-x64"
+  "bun-linux-x64-baseline:lepus-linux-x64"
+  "bun-linux-arm64:lepus-linux-arm64"
 )
 
 for entry in "${TARGETS[@]}"; do

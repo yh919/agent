@@ -26,7 +26,7 @@ describe('UserProfileStore.append', () => {
     const store = new UserProfileStore({ home });
     await store.append('prefers terse output');
     expect(store.load()).toBe('- prefers terse output');
-    expect(store.path).toBe(join(home, '.pentesterflow', 'USER.md'));
+    expect(store.path).toBe(join(home, '.lepus', 'agent', 'USER.md'));
   });
 
   it('accumulates multiple notes as separate bullet lines', async () => {

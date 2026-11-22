@@ -2,6 +2,7 @@
 
 import type { Config } from '../config/config.js';
 import { AnthropicClient } from './anthropic.js';
+import { CliClient, isCliBackend } from './cliclient.js';
 import type { Client } from './client.js';
 import { GeminiClient } from './gemini.js';
 import { OllamaClient } from './ollama.js';
@@ -51,6 +52,9 @@ export function newFromConfig(cfg: Config): Client {
       gen,
     );
   }
+
+  // Signed-in agent CLIs: no key, the CLI holds the subscription login.
+  if (isCliBackend(cfg.backend)) return new CliClient(cfg.backend, cfg.model);
 
   switch (cfg.backend) {
     case 'ollama':
@@ -114,8 +118,8 @@ export function newFromConfig(cfg: Config): Client {
         cfg.model || OPENROUTER_DEFAULT_MODEL,
         'openrouter',
         {
-          'HTTP-Referer': 'https://github.com/pentesterflow/agent',
-          'X-OpenRouter-Title': 'PentesterFlow',
+          'HTTP-Referer': 'https://github.com/yh919/agent',
+          'X-OpenRouter-Title': 'Lepus',
         },
         gen,
       );

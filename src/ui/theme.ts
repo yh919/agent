@@ -1,23 +1,19 @@
-// Claude Code–style design tokens for the PentesterFlow TUI.
+// Lepus design tokens for the TUI (brand rules: Lepus brand/BRAND.md).
 //
-// Palette intent (mirrors the Claude Code CLI's own theme): one unified
-// coral/terracotta accent (Anthropic's brand color, #D97757) for BOTH brand
-// identity and focus/selection — Claude Code doesn't split those into two
-// hues the way the previous GrokNight-inspired palette did (magenta brand +
-// cyan focus).
-//   brand/focus (coral) — product identity, user prompt, selection, active
-//                          menus, modal borders, primary chrome
-//   muted       (gray)  — secondary text, footers, idle borders
+//   brand  (Lepus Red #FF0A0A)   — logo, prompt, modal borders, primary chrome
+//   focus  (Signal Red #FF5C5C)  — red text/selection on dark (readable 6.4:1)
+//   muted  (gray)                — secondary text, footers, idle borders
 //
 // Keep this module free of React so tests and non-UI code can import tokens.
 
-const CLAUDE_CORAL = '#D97757';
+const LEPUS_RED = '#FF0A0A';
+const SIGNAL_RED = '#FF5C5C';
 
 export const theme = {
-  /** Product / user accent — Anthropic's Claude brand coral. */
-  brand: CLAUDE_CORAL,
-  /** Focus / selection — active menus, modal frames. Same hue as brand. */
-  focus: CLAUDE_CORAL,
+  /** Product / user accent — Lepus Red. */
+  brand: LEPUS_RED,
+  /** Focus / selection — active menus, modal frames. Signal Red reads better as text. */
+  focus: SIGNAL_RED,
   /** Primary readable text. */
   text: '#FFFFFF' as const,
   /** Secondary / dim copy. */
@@ -29,8 +25,8 @@ export const theme = {
   superMode: '#ff8700',
 
   border: {
-    brand: CLAUDE_CORAL,
-    focus: CLAUDE_CORAL,
+    brand: LEPUS_RED,
+    focus: SIGNAL_RED,
     idle: 'gray' as const,
   },
 

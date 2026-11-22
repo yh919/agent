@@ -10,7 +10,7 @@ import type { SlashContext } from './context.js';
  * /skills — list / enable / disable. Without args, prints the loaded
  * skills with their on/off state. `/skills <name>` toggles. Explicit
  * `/skills enable <name>` and `/skills disable <name>` are also accepted.
- * Persistence to ~/.pentesterflow/config.json is delegated to the
+ * Persistence to ~/.lepus/agent/config.json is delegated to the
  * persistDisabledSkills callback wired by the CLI.
  */
 export function handleSkills(ctx: SlashContext): void {
@@ -30,7 +30,7 @@ export function handleSkills(ctx: SlashContext): void {
   }
 
   // /skills new <name> — scaffold a skill under
-  // ./.pentesterflow/skills/<name>/SKILL.md (an auto-discovered dir), then
+  // ./.lepus/agent/skills/<name>/SKILL.md (an auto-discovered dir), then
   // hot-load it so it's usable immediately via /<name>.
   if (rest[0] === 'new') {
     const name = (rest[1] ?? '').trim();
@@ -44,7 +44,7 @@ export function handleSkills(ctx: SlashContext): void {
       });
       return;
     }
-    const skillsRoot = resolve(process.cwd(), '.pentesterflow', 'skills');
+    const skillsRoot = resolve(process.cwd(), '.lepus', 'agent', 'skills');
     const dir = join(skillsRoot, name);
     const file = join(dir, 'SKILL.md');
     if (existsSync(file)) {
@@ -62,7 +62,7 @@ export function handleSkills(ctx: SlashContext): void {
       agent.skills.loadDir(skillsRoot);
       agent.rebuildFromSkills();
       // Tell the CLI to start watching this dir so future edits hot-reload
-      // even if .pentesterflow/skills didn't exist at startup.
+      // even if .lepus/agent/skills didn't exist at startup.
       onSkillCreated?.(skillsRoot);
       dispatch({
         type: 'append',

@@ -1,6 +1,6 @@
 // Automation hooks. Config-driven (see config.ts's HookConfig) — a hook
 // spawns `command` (argv-style, same no-shell-metachar safety as
-// PluginConfig) with context passed as PENTESTERFLOW_HOOK_* env vars.
+// PluginConfig) with context passed as LEPUS_HOOK_* env vars.
 //
 // pre-tool-call hooks can veto: a non-zero exit blocks the tool call and its
 // stderr becomes the tool's error result, same shape as a denied permission
@@ -16,7 +16,7 @@ import { canonicalToolName } from '../tools/aliases.js';
 
 const HOOK_TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 16 * 1024;
-const ENV_PREFIX = 'PENTESTERFLOW_HOOK_';
+const ENV_PREFIX = 'LEPUS_HOOK_';
 
 export interface HookVeto {
   blocked: boolean;

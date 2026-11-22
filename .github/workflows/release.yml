@@ -71,7 +71,7 @@ jobs:
 
           {
             echo "release_tag=${release_tag}"
-            echo "release_name=PentesterFlow ${release_tag}"
+            echo "release_name=Lepus ${release_tag}"
             echo "should_publish_release=${should_publish_release}"
           } >> "$GITHUB_OUTPUT"
 
@@ -98,13 +98,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: bun-darwin-arm64, name: pentesterflow-darwin-arm64 }
+          - { target: bun-darwin-arm64, name: lepus-darwin-arm64 }
           # Keep x64 asset names stable, but use Bun's baseline runtime so
           # older x86_64 CPUs do not crash with SIGILL before startup.
-          - { target: bun-darwin-x64-baseline, name: pentesterflow-darwin-x64 }
-          - { target: bun-linux-x64-baseline, name: pentesterflow-linux-x64 }
-          - { target: bun-linux-arm64, name: pentesterflow-linux-arm64 }
-          - { target: bun-windows-x64-baseline, name: pentesterflow-windows-x64.exe }
+          - { target: bun-darwin-x64-baseline, name: lepus-darwin-x64 }
+          - { target: bun-linux-x64-baseline, name: lepus-linux-x64 }
+          - { target: bun-linux-arm64, name: lepus-linux-arm64 }
+          - { target: bun-windows-x64-baseline, name: lepus-windows-x64.exe }
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -121,7 +121,7 @@ jobs:
           fi
           # The Bun-compiled binary doesn't run tsup's --define, so it reads
           # the FALLBACK in version.ts. Patch it to the release version so
-          # `pentesterflow --version` reports correctly. No-op if unmatched.
+          # `lepus --version` reports correctly. No-op if unmatched.
           sed -i "s/const FALLBACK = 'dev';/const FALLBACK = '${VER}';/" src/version/version.ts
       - name: Compile standalone binary
         run: |
@@ -172,11 +172,11 @@ jobs:
           set -euo pipefail
           cd dist-bin
           expected=(
-            pentesterflow-darwin-arm64
-            pentesterflow-darwin-x64
-            pentesterflow-linux-x64
-            pentesterflow-linux-arm64
-            pentesterflow-windows-x64.exe
+            lepus-darwin-arm64
+            lepus-darwin-x64
+            lepus-linux-x64
+            lepus-linux-arm64
+            lepus-windows-x64.exe
           )
           test -s SHA256SUMS || { echo "::error::SHA256SUMS is missing or empty"; exit 1; }
           fail=0

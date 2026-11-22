@@ -165,7 +165,7 @@ const KEYBINDINGS: Array<{ keys: string; desc: string }> = [
   { keys: 'Ctrl-Y', desc: 'copy the latest tool output / finding to the clipboard' },
   { keys: 'Ctrl-F', desc: 'cycle the transcript filter (all→compact→findings→errors→current)' },
   { keys: 'Esc', desc: 'cancel an in-flight turn / clear the input draft' },
-  { keys: 'Ctrl-C', desc: 'quit pentesterflow' },
+  { keys: 'Ctrl-C', desc: 'quit lepus' },
 ];
 
 const TIPS: string[] = [
@@ -202,7 +202,7 @@ function buildHelpText(
 
   const out: string[] = [];
 
-  out.push(c.bold.cyan('PentesterFlow') + c.gray(' — quick reference'));
+  out.push(c.bold.cyan('Lepus') + c.gray(' — quick reference'));
   out.push(c.gray('─'.repeat(60)));
   out.push('');
 

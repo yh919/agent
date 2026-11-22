@@ -56,7 +56,7 @@ describe('copyText', () => {
 
 describe('host clipboard (optional)', () => {
   it('round-trips via the platform clipboard tool when available', async () => {
-    const marker = `pentesterflow-clipboard-test-${Date.now()}`;
+    const marker = `lepus-clipboard-test-${Date.now()}`;
     // Force host path: renderer reports unsupported, stdout is a no-op.
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     const ok = await copyText(marker, { copyToClipboardOSC52: () => false });

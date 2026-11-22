@@ -94,7 +94,7 @@ export class Store {
 
     // Re-read the index immediately before writing rather than reusing the
     // copy loaded at the top of this call: `this.queue` only serializes
-    // saves within THIS process. Two separate pentesterflow processes
+    // saves within THIS process. Two separate lepus processes
     // pointed at the same findings/ dir (e.g. sharded scan agents) can both
     // load the same index before either writes it back — the second
     // saveIndex() would otherwise silently overwrite the first process's

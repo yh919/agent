@@ -108,7 +108,7 @@ export function handleConfig(ctx: SlashContext): void {
       entry: {
         kind: 'system',
         text: [
-          'Example ~/.pentesterflow/config.json (JSONC comments OK on load):',
+          'Example ~/.lepus/agent/config.json (JSONC comments OK on load):',
           '',
           EXAMPLE_CONFIG_JSON.trimEnd(),
         ].join('\n'),
@@ -149,7 +149,7 @@ export function handleConfig(ctx: SlashContext): void {
       text: [
         `config file: ${path}`,
         'edit with any editor; JSONC comments (// …) are accepted on load.',
-        'empty defaults are omitted when pentesterflow saves.',
+        'empty defaults are omitted when lepus saves.',
         '',
         body,
         diskNote,

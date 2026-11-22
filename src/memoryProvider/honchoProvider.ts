@@ -30,8 +30,8 @@ export function createHonchoProvider(opts: HonchoProviderOptions = {}): MemoryPr
     '',
   );
   const apiKey = opts.apiKey || process.env.HONCHO_API_KEY || '';
-  const workspaceId = opts.workspaceId || 'pentesterflow';
-  const peerName = opts.peerName || 'pentesterflow-agent';
+  const workspaceId = opts.workspaceId || 'lepus';
+  const peerName = opts.peerName || 'lepus-agent';
   const headers = (): Record<string, string> =>
     apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 

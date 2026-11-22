@@ -7,7 +7,7 @@
 // agent can append to it autonomously via the update_user_profile tool, not
 // just on explicit user request.
 //
-// Lives at ~/.pentesterflow/USER.md only (no project scope: communication
+// Lives at ~/.lepus/agent/USER.md only (no project scope: communication
 // style doesn't reset per engagement). Always injected into the system
 // prompt, like engagement.md.
 
@@ -31,7 +31,7 @@ export class UserProfileStore {
 
   constructor(opts: UserProfileStoreOptions = {}) {
     const home = opts.home ?? homedir();
-    this.path = join(home, '.pentesterflow', 'USER.md');
+    this.path = join(home, '.lepus', 'agent', 'USER.md');
   }
 
   /** Read the file, trimmed. Returns '' when missing or unreadable. */

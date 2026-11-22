@@ -45,7 +45,7 @@ async function renderFrame(props: Partial<Parameters<typeof ChatPane>[0]> = {}):
 describe('ChatPane', () => {
   it('keeps the empty chat pane free of a personalized greeting', async () => {
     const text = await renderFrame({ committed: [] });
-    expect(text).toContain('PF');
+    expect(text).toContain('Lepus');
     expect(text).not.toContain('Hello ');
     expect(text).not.toContain('The World');
     expect(text).not.toContain('🧑‍💻');
@@ -53,7 +53,7 @@ describe('ChatPane', () => {
 
   it('shows the banner once above the scrollable log', async () => {
     const text = await renderFrame({ committed: [entry('first entry')] });
-    expect(text).toContain('PF');
+    expect(text).toContain('Lepus');
     expect(text).toContain('first entry');
   });
 

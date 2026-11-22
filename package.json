@@ -1,11 +1,11 @@
 {
-  "name": "@pentesterflow/agent",
+  "name": "@lepus/agent",
   "version": "0.3.0",
   "description": "Human-in-the-loop agentic CLI for authorized penetration testing and bug bounty work.",
   "type": "module",
   "bin": {
-    "pentesterflow": "./dist/cli.js",
-    "pentesterflow-browser-mcp": "./dist/browser-mcp.js"
+    "lepus": "./dist/cli.js",
+    "lepus-browser-mcp": "./dist/browser-mcp.js"
   },
   "files": [
     "dist",
@@ -41,13 +41,13 @@
     "opentui"
   ],
   "license": "Apache-2.0",
-  "homepage": "https://github.com/pentesterflow/agent",
+  "homepage": "https://github.com/yh919/agent",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pentesterflow/agent.git"
+    "url": "https://github.com/yh919/agent.git"
   },
   "bugs": {
-    "url": "https://github.com/pentesterflow/agent/issues"
+    "url": "https://github.com/yh919/agent/issues"
   },
   "engines": {
     "node": ">=20.0.0"

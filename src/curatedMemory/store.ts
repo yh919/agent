@@ -11,8 +11,8 @@
 // word.
 //
 // Two scopes (mirrors EngagementStore / IntelligenceStore):
-//   - project:  ./.pentesterflow/memory/   (this engagement; commit with it)
-//   - personal: ~/.pentesterflow/memory/   (habits/preferences across engagements)
+//   - project:  ./.lepus/agent/memory/   (this engagement; commit with it)
+//   - personal: ~/.lepus/agent/memory/   (habits/preferences across engagements)
 //
 // "Don't forget mid-session" is enforced by the agent, not here: the index()
 // rides in the system prompt on every request (survives compaction) and
@@ -88,8 +88,8 @@ export class MemoryStore {
   constructor(opts: MemoryStoreOptions = {}) {
     const cwd = resolve(opts.cwd ?? process.cwd());
     const home = opts.home ?? homedir();
-    this.projectDir = join(cwd, '.pentesterflow', 'memory');
-    this.personalDir = join(home, '.pentesterflow', 'memory');
+    this.projectDir = join(cwd, '.lepus', 'agent', 'memory');
+    this.personalDir = join(home, '.lepus', 'agent', 'memory');
   }
 
   private dir(scope: MemoryScope): string {
@@ -290,7 +290,7 @@ export class MemoryStore {
       return;
     }
     const lines = [
-      `# PentesterFlow memory (${scope})`,
+      `# Lepus memory (${scope})`,
       '',
       'One fact per file. Recalled by relevance each turn; this index is always in context.',
       '',

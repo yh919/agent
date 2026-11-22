@@ -18,7 +18,7 @@ describe('EngagementStore', () => {
   });
 
   function writeEngagement(root: string, body: string): void {
-    const dir = join(root, '.pentesterflow');
+    const dir = join(root, '.lepus', 'agent');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'engagement.md'), body);
   }
