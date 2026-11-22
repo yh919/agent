@@ -962,7 +962,14 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
       process.stderr.write(`${modelWarning}\n`);
       noticeHolder.publish?.(modelWarning);
     }
-    const probeP = probeToolSupport(agent.client, signal).then((r) => {
+    // Subscription CLIs: tool calls go through our JSON protocol (tested in
+    // cliclient.test.ts). Probing would spend a plan request on every start and
+    // a cold CLI often misses the 8s probe budget, so mark it ready instead.
+    const probeP = (
+      isCliBackend(cfg.backend)
+        ? Promise.resolve({ toolSupport: 'yes' as const, detail: undefined })
+        : probeToolSupport(agent.client, signal)
+    ).then((r) => {
       bannerHolder.publish?.({ toolSupport: r.toolSupport });
       if (r.toolSupport === 'no' && r.detail) {
         process.stderr.write(`⚠  model ${agent.client.model()}: ${r.detail}\n`);
@@ -1258,8 +1265,19 @@ function effectiveAutoCompactThreshold(cfg: config.Config): number {
   ) {
     return kimiAutoCompactThreshold(cfg.model) ?? cfg.auto_compact_threshold;
   }
+  // Subscription CLIs front 200K+ windows (Claude, GPT-5, Gemini); the 16K
+  // default is sized for local models and would compact on the first turn.
+  if (
+    isCliBackend(cfg.backend) &&
+    cfg.auto_compact_threshold === config.DEFAULT_AUTO_COMPACT_THRESHOLD
+  ) {
+    return CLI_AUTO_COMPACT_THRESHOLD;
+  }
   return cfg.auto_compact_threshold;
 }
+
+/** 75% of a 200K window, leaving room for the reply and the next tool output. */
+const CLI_AUTO_COMPACT_THRESHOLD = 150_000;
 
 function effectivePromptProfile(cfg: config.Config): PromptProfile {
   return cfg.backend === 'groq' || cfg.backend === 'gemini' ? 'compact' : 'full';

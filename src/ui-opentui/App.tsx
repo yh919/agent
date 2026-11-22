@@ -939,6 +939,8 @@ export function App({
   const chatScrollHeight = hasPerm
     ? chatPaneHeight
     : Math.max(CHAT_MIN_HEIGHT, chatPaneHeight - softWrapExtra);
+  // Whatever rows the chat strip gives up belong to the footer.
+  const footerHeight = Math.max(0, rows - bannerHeight - chatScrollHeight);
 
   return (
     <box
@@ -978,19 +980,22 @@ export function App({
           })
         }
       />
-      {/* Exact footer height when a modal is open so ChatPane + footer
-            always sum to `rows`. flexShrink:0 keeps Yoga from crushing
-            the permission card; overflow:hidden is a last-resort clip. */}
+      {/* Exact footer height in EVERY state so ChatPane + footer always sum
+            to `rows`. Never toggle height back to undefined: the renderer
+            keeps the stale modal height, which pushed the status bar and
+            input below the last row after a picker closed (blank footer).
+            flexShrink:0 keeps Yoga from crushing the permission card;
+            overflow:hidden is a last-resort clip. */}
       <box
         style={{
           flexDirection: 'column',
           flexShrink: 0,
           flexGrow: 0,
-          height: hasModal || hasPerm ? footerReserved : undefined,
-          maxHeight: hasModal || hasPerm ? footerReserved : undefined,
+          height: footerHeight,
+          maxHeight: footerHeight,
           overflow: 'hidden',
           width: chatWidth,
-          justifyContent: 'center',
+          justifyContent: hasModal ? 'center' : 'flex-end',
           alignItems: 'center',
         }}
       >

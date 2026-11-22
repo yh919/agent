@@ -264,19 +264,19 @@ function openProviderPicker(
         {
           group: 'Subscription',
           label: withCurrent(CLI_BACKENDS['claude-code'].label, cur.backend === 'claude-code'),
-          badge: cliInstalled('claude-code') ? 'Signed-in CLI' : 'Not installed',
+          badge: cliInstalled('claude-code') ? 'CLI installed' : 'Not installed',
           description: 'local `claude` CLI · Claude plan · no API key',
         },
         {
           group: 'Subscription',
           label: withCurrent(CLI_BACKENDS.codex.label, cur.backend === 'codex'),
-          badge: cliInstalled('codex') ? 'Signed-in CLI' : 'Not installed',
+          badge: cliInstalled('codex') ? 'CLI installed' : 'Not installed',
           description: 'local `codex` CLI · ChatGPT plan · no API key',
         },
         {
           group: 'Subscription',
           label: withCurrent(CLI_BACKENDS['gemini-cli'].label, cur.backend === 'gemini-cli'),
-          badge: cliInstalled('gemini-cli') ? 'Signed-in CLI' : 'Not installed',
+          badge: cliInstalled('gemini-cli') ? 'CLI installed' : 'Not installed',
           description: 'local `gemini` CLI · Google account · no API key',
         },
         // —— Hosted ——————————————————————————————————————————————

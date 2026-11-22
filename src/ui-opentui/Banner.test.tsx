@@ -45,7 +45,7 @@ async function renderFrame(node: Parameters<typeof testRender>[0], width = 80): 
 describe('Banner', () => {
   it('renders the Lepus mark plus meta', async () => {
     const frame = await renderFrame(<Banner data={base} width={80} />, 80);
-    expect(frame).toContain('▟█▙');
+    expect(frame).toContain('▟▀▙');
     expect(frame).toContain('Lepus');
     expect(frame).toContain('v0.1.0-dev');
     expect(frame).toContain('ollama');

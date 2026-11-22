@@ -1,7 +1,8 @@
 // Banner: Lepus mark, connection metadata, and helpers.
 
-// Lepus mark (peak on a rounded base), 3 cells wide.
-export const MINI_LOGO = ['▗█▖', '▟█▙', '▀▀▀'];
+// Lepus mark (peak, inner notch, base), 3 cells wide. The notch keeps it
+// from reading as a solid block in tall terminal fonts.
+export const MINI_LOGO = ['▗█▖', '▟▀▙', '▀▀▀'];
 export const MINI_LOGO_WIDTH = 3;
 
 export type ToolSupportPill = 'yes' | 'no' | 'unknown' | 'probing';
