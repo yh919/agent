@@ -169,7 +169,9 @@ export function Input(props: InputProps) {
             return (
               <box key={row.key} style={{ flexDirection: 'row' }}>
                 <text fg={theme.brand}>{row.prefix}</text>
-                <text fg={theme.text}>{head}</text>
+                {/* Empty <text> still paints a cell; skip it so the cursor on an
+                    empty line sits where the first character will. */}
+                {head ? <text fg={theme.text}>{head}</text> : null}
                 {underCursor ? (
                   <text fg="black" bg={theme.brand}>
                     {underCursor}
@@ -177,7 +179,7 @@ export function Input(props: InputProps) {
                 ) : (
                   <text fg={theme.brand}>{theme.glyphs.cursor}</text>
                 )}
-                <text fg={theme.text}>{tail}</text>
+                {tail ? <text fg={theme.text}>{tail}</text> : null}
               </box>
             );
           })}

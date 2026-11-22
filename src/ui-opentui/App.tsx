@@ -195,6 +195,8 @@ export function App({
   }, []);
 
   const historyRef = useRef<string[]>([]);
+  const exitArmedAt = useRef(0);
+  const [exitHint, setExitHint] = useState(false);
   const historyDraft = useRef<string>('');
   const [historyIdx, setHistoryIdx] = useState<number | null>(null);
   const HISTORY_CAP = 500;
@@ -634,9 +636,25 @@ export function App({
   useKeyboard((e) => {
     // 0. Always-on: Ctrl-C kills the app; Esc cancels an in-flight run.
     //    Cmd+C (meta) is copy on macOS — handled below, not quit.
+    // Ctrl+C like Claude Code: interrupt a running turn, else clear the
+    // draft, else arm exit — a second press within 2s quits. A single stray
+    // press no longer throws away the session or a typed prompt.
     if (e.ctrl && e.name === 'c' && !e.meta) {
-      runCtl.current?.abort();
-      onExit();
+      if (state.busy) {
+        runCtl.current?.abort();
+        return;
+      }
+      if (inputValue.length > 0) {
+        input.clear();
+        return;
+      }
+      if (Date.now() - exitArmedAt.current < 2000) {
+        onExit();
+        return;
+      }
+      exitArmedAt.current = Date.now();
+      setExitHint(true);
+      setTimeout(() => setExitHint(false), 2000);
       return;
     }
     if (e.name === 'escape' && state.busy) {
@@ -794,12 +812,43 @@ export function App({
       return;
     }
 
+    // 5b'. Shift/Option+Enter → newline (Claude Code convention). A trailing
+    //      backslash before Enter does the same where the terminal can't
+    //      report modified Enter.
+    if (e.name === 'return' && (e.shift || e.meta)) {
+      input.insertText('\n');
+      return;
+    }
+    if (e.name === 'return' && inputValue.slice(0, input.cursor).endsWith('\\')) {
+      const c = input.cursor;
+      input.setValue(`${inputValue.slice(0, c - 1)}\n${inputValue.slice(c)}`, c);
+      return;
+    }
+
     if (e.name === 'return') {
       const v = inputValue.trim();
       if (v.length === 0) return;
       input.clear();
       setInputEpoch((n) => n + 1);
       submit(v);
+      return;
+    }
+
+    // 5c'. Readline word ops (Claude Code / shell muscle memory).
+    if ((e.meta || e.ctrl) && (e.name === 'left' || e.name === 'right')) {
+      input.moveWord(e.name === 'left' ? -1 : 1);
+      return;
+    }
+    if (e.meta && (e.name === 'b' || e.name === 'f')) {
+      input.moveWord(e.name === 'b' ? -1 : 1);
+      return;
+    }
+    if ((e.ctrl && e.name === 'w') || (e.meta && e.name === 'backspace')) {
+      input.kill('word-back');
+      return;
+    }
+    if (e.ctrl && (e.name === 'u' || e.name === 'k')) {
+      input.kill(e.name === 'u' ? 'line-start' : 'line-end');
       return;
     }
 
@@ -1056,11 +1105,13 @@ export function App({
               cursor={input.cursor}
               width={chatWidth}
               hint={
-                state.busy
-                  ? queueLen > 0
-                    ? `${queueLen} queued · Esc to cancel`
-                    : 'Esc to cancel'
-                  : undefined
+                exitHint
+                  ? 'Press Ctrl+C again to exit'
+                  : state.busy
+                    ? queueLen > 0
+                      ? `${queueLen} queued · Esc to cancel`
+                      : 'Esc to cancel'
+                    : undefined
               }
             />
           </box>

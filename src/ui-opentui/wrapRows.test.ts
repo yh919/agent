@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { wrapRowToWidth, wrapRowsToWidth } from './wrapRows.js';
+import { wrapRowToWidth, wrapRowsToWidth, wrapSegments } from './wrapRows.js';
 
 describe('wrapRowToWidth', () => {
   it('leaves short rows alone', () => {
@@ -91,5 +91,21 @@ describe('wrapRowsToWidth', () => {
     const out = wrapRowsToWidth(rows, 4);
     expect(out).toHaveLength(3);
     expect(out.map((r) => r.spans.map((s) => s.text).join(''))).toEqual(['ok', '1234', '5678']);
+  });
+});
+
+describe('wrapSegments word wrap', () => {
+  const lines = (s: string, w: number, rest = w) =>
+    wrapSegments(s, w, rest).map(([a, b]) => s.slice(a, b));
+  it('breaks between words, never inside one that fits', () => {
+    expect(lines('reducing whole classes of attacks', 12)).toEqual([
+      'reducing',
+      'whole',
+      'classes of',
+      'attacks',
+    ]);
+  });
+  it('hard-splits a word longer than the line and honors newlines', () => {
+    expect(lines('abcdefghij\nok', 4)).toEqual(['abcd', 'efgh', 'ij', 'ok']);
   });
 });

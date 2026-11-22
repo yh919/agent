@@ -13,6 +13,7 @@ import {
   positionOf,
   shouldCollapsePaste,
   stripPasteMarkers,
+  wordBoundary,
 } from './useTextField.js';
 
 describe('positionOf', () => {
@@ -116,5 +117,14 @@ describe('pasted text markers', () => {
     expect(expandPastedTextMarkers('[Pasted text #2 +9 lines]', new Map())).toBe(
       '[Pasted text #2 +9 lines]',
     );
+  });
+});
+
+describe('wordBoundary', () => {
+  const v = 'curl -s https://x.io/api';
+  it('jumps readline-style over punctuation and words', () => {
+    expect(wordBoundary(v, v.length, -1)).toBe(v.indexOf('api'));
+    expect(wordBoundary(v, 0, 1)).toBe(4);
+    expect(wordBoundary(v, 4, 1)).toBe(7);
   });
 });

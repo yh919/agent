@@ -440,15 +440,14 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
   const askHolder: {
     publish: ((req: import('../ui/askBridge.js').AskRequest | null) => void) | null;
   } = { publish: null };
-  const bannerHolder: {
-    publish: ((patch: Partial<BannerData>) => void) | null;
-  } = { publish: null };
+  // Banner + notice publishes can fire before the TUI mounts (startup probes,
+  // migration notices). Buffer them and replay on bind so they aren't lost;
+  // a fast probe result used to vanish and leave the banner on "probing…".
+  const bannerHolder = earlyHolder<Partial<BannerData>>();
   // System-notice bridge — small "kind: system" appends from outside
   // the agent loop. Used by the live-reload watcher to surface
   // "skill reloaded" without spinning up a permission/ask modal.
-  const noticeHolder: {
-    publish: ((notice: NoticePayload) => void) | null;
-  } = { publish: null };
+  const noticeHolder = earlyHolder<NoticePayload>();
   // Long shell commands (background: true) run detached; a completion
   // notice routes through the same out-of-band bridge as everything else
   // in noticeHolder, so it surfaces in the TUI the moment it finishes even
@@ -1059,12 +1058,8 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     bindAskPublisher: (publish) => {
       askHolder.publish = publish;
     },
-    bindBannerPublisher: (publish) => {
-      bannerHolder.publish = publish;
-    },
-    bindNoticePublisher: (publish) => {
-      noticeHolder.publish = publish;
-    },
+    bindBannerPublisher: (publish) => bannerHolder.bind(publish),
+    bindNoticePublisher: (publish) => noticeHolder.bind(publish),
     resumeSummary,
     sessionDebug,
     setYolo: (on: boolean) => prompter.setYolo(on),
@@ -1469,3 +1464,16 @@ main()
     process.stderr.write(`fatal: ${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(1);
   });
+
+/** Publisher slot that queues calls made before a subscriber binds, then replays them. */
+function earlyHolder<T>(): { publish: (v: T) => void; bind: (fn: (v: T) => void) => void } {
+  let target: ((v: T) => void) | null = null;
+  const queue: T[] = [];
+  return {
+    publish: (v) => (target ? target(v) : void queue.push(v)),
+    bind: (fn) => {
+      target = fn;
+      for (const v of queue.splice(0)) fn(v);
+    },
+  };
+}

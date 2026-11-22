@@ -162,7 +162,7 @@ export function PermissionModal({
         >
           <box style={{ flexDirection: 'row' }}>
             <text fg={theme.muted} attributes={TextAttributes.DIM}>
-              {shell ? '$ command' : 'payload'}
+              {shell ? 'command' : 'payload'}
             </text>
           </box>
           {detailView.lines.map((line, i) => (

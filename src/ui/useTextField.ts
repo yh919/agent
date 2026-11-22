@@ -31,9 +31,15 @@ export interface TextFieldActions {
   moveDown: () => void;
   moveLineStart: () => void;
   moveLineEnd: () => void;
+  /** Alt+B / Alt+F (and Alt/Ctrl+←→): jump a word. */
+  moveWord: (dir: -1 | 1) => void;
+  /** Ctrl+U line-start, Ctrl+W word-back, Ctrl+K line-end: delete that span. */
+  kill: (span: KillSpan) => void;
   setValue: (v: string, cursor?: number) => void;
   clear: () => void;
 }
+
+export type KillSpan = 'line-start' | 'word-back' | 'line-end';
 
 export type TextField = TextFieldState & TextFieldActions;
 
@@ -46,6 +52,8 @@ type Action =
   | { type: 'move-down' }
   | { type: 'move-line-start' }
   | { type: 'move-line-end' }
+  | { type: 'word'; dir: -1 | 1 }
+  | { type: 'kill'; span: KillSpan }
   | { type: 'set'; value: string; cursor: number };
 
 function reducer(s: TextFieldState, a: Action): TextFieldState {
@@ -95,9 +103,38 @@ function reducer(s: TextFieldState, a: Action): TextFieldState {
       const lines = s.value.split('\n');
       return { ...s, cursor: offsetAt(s.value, line, (lines[line] ?? '').length) };
     }
+    case 'word':
+      return { ...s, cursor: wordBoundary(s.value, s.cursor, a.dir) };
+    case 'kill': {
+      const { line } = positionOf(s.value, s.cursor);
+      const lineStart = offsetAt(s.value, line, 0);
+      const lineEnd = lineStart + (s.value.split('\n')[line] ?? '').length;
+      // Shell semantics: at a line edge, eat the newline so repeated presses keep going.
+      const [from, to] =
+        a.span === 'line-end'
+          ? [s.cursor, s.cursor === lineEnd ? Math.min(s.value.length, lineEnd + 1) : lineEnd]
+          : a.span === 'line-start'
+            ? [s.cursor === lineStart ? Math.max(0, lineStart - 1) : lineStart, s.cursor]
+            : [wordBoundary(s.value, s.cursor, -1), s.cursor];
+      return { value: s.value.slice(0, from) + s.value.slice(to), cursor: from };
+    }
     case 'set':
       return { value: a.value, cursor: clamp(a.cursor, 0, a.value.length) };
   }
+}
+
+/** Next word edge from `cursor` in `dir` (readline-style: skip spaces, then the word). */
+export function wordBoundary(value: string, cursor: number, dir: -1 | 1): number {
+  const isWord = (ch: string | undefined) => ch !== undefined && /[\p{L}\p{N}_]/u.test(ch);
+  let i = cursor;
+  if (dir < 0) {
+    while (i > 0 && !isWord(value[i - 1])) i -= 1;
+    while (i > 0 && isWord(value[i - 1])) i -= 1;
+  } else {
+    while (i < value.length && !isWord(value[i])) i += 1;
+    while (i < value.length && isWord(value[i])) i += 1;
+  }
+  return i;
 }
 
 export function useTextField(initial = ''): TextField {
@@ -115,6 +152,8 @@ export function useTextField(initial = ''): TextField {
   const moveDown = useCallback(() => dispatch({ type: 'move-down' }), []);
   const moveLineStart = useCallback(() => dispatch({ type: 'move-line-start' }), []);
   const moveLineEnd = useCallback(() => dispatch({ type: 'move-line-end' }), []);
+  const moveWord = useCallback((dir: -1 | 1) => dispatch({ type: 'word', dir }), []);
+  const kill = useCallback((span: KillSpan) => dispatch({ type: 'kill', span }), []);
   const setValue = useCallback(
     (v: string, cursor?: number) => dispatch({ type: 'set', value: v, cursor: cursor ?? v.length }),
     [],
@@ -133,6 +172,8 @@ export function useTextField(initial = ''): TextField {
     moveDown,
     moveLineStart,
     moveLineEnd,
+    moveWord,
+    kill,
     setValue,
     clear,
   };

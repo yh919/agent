@@ -853,47 +853,10 @@ export function formatCompactEvent(ev: Extract<AgentEvent, { type: 'compact' }>)
   return parts.length > 0 ? `Context compacted · ${parts.join(' · ')}` : 'Context compacted';
 }
 
-/**
- * Collapse long assistant prose (Grok-style): short head stays visible,
- * full body is behind click / Ctrl-O expand. Short replies pass through.
- */
-export function collapseAssistantProse(text: string): {
-  preview: string;
-  full: string;
-  collapsible: boolean;
-} {
-  const full = stripControlSequences(text).replace(/\r\n/g, '\n').trimEnd();
-  if (!full) return { preview: full, full, collapsible: false };
-  const lines = full.split('\n');
-  const HEAD = 5;
-  const LINE_THRESHOLD = 7;
-  const CHAR_THRESHOLD = 480;
-  if (lines.length <= LINE_THRESHOLD && full.length <= CHAR_THRESHOLD) {
-    return { preview: full, full, collapsible: false };
-  }
-  let head = lines.slice(0, HEAD).join('\n');
-  if (head.length > CHAR_THRESHOLD) head = `${head.slice(0, CHAR_THRESHOLD)}…`;
-  const shown = head.split('\n').length;
-  const hidden = Math.max(0, lines.length - shown);
-  const cue =
-    hidden > 0
-      ? `… ${hidden} more line${hidden === 1 ? '' : 's'} · click to expand`
-      : '… · click to expand';
-  return { preview: `${head}\n${cue}`, full, collapsible: true };
-}
-
+// Assistant prose is never folded (Claude Code shows the whole answer);
+// only tool output collapses. Finalizing just ends the streaming state.
 function finalizeAssistantEntry(entry: TranscriptEntry): TranscriptEntry {
-  const body = entry.text ?? '';
-  const c = collapseAssistantProse(body);
-  if (!c.collapsible) return { ...entry, streaming: false };
-  return {
-    ...entry,
-    streaming: false,
-    text: c.preview,
-    fullText: c.full,
-    collapsible: true,
-    expanded: false,
-  };
+  return { ...entry, streaming: false };
 }
 
 function applyAgentEvent(state: AppState, ev: AgentEvent): AppState {

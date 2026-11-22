@@ -25,6 +25,62 @@ export interface WrappableRow {
   sourceEntry?: unknown;
 }
 
+/**
+ * Word-aware break points over `plain`: [start, end) per physical line, in
+ * string indices. Breaks after the last space that fits (the space is
+ * dropped); a word longer than the line is hard-split. '\n' always breaks.
+ */
+export function wrapSegments(plain: string, first: number, rest: number): Array<[number, number]> {
+  const segs: Array<[number, number]> = [];
+  let budget = first;
+  let lineStart = 0;
+  let col = 0;
+  let lastSpaceEnd = -1; // index just past the last space on this line
+  let i = 0;
+  const push = (end: number, next: number) => {
+    segs.push([lineStart, end]);
+    lineStart = next;
+    col = 0;
+    lastSpaceEnd = -1;
+    budget = rest;
+  };
+  while (i < plain.length) {
+    if (plain[i] === '\n') {
+      push(i, i + 1);
+      i += 1;
+      continue;
+    }
+    const g = graphemes(plain.slice(i, i + 8))[0] ?? plain[i] ?? '';
+    const gw = cellWidth(g);
+    if (col + gw > budget && col > 0) {
+      if (g === ' ') {
+        push(i, i + 1); // break on this space, drop it
+        i += 1;
+        continue;
+      }
+      // Re-flow only when the partial word would fit on a fresh line;
+      // otherwise moving it just strands the head (e.g. a lone "⏺").
+      const wordEnd = plain.slice(lastSpaceEnd).search(/[ \n]/);
+      const wordLen = cellWidth(
+        plain.slice(lastSpaceEnd, wordEnd < 0 ? undefined : lastSpaceEnd + wordEnd),
+      );
+      if (lastSpaceEnd > lineStart && wordLen <= rest) {
+        // Re-flow the partial word onto the next line.
+        push(lastSpaceEnd - 1, lastSpaceEnd);
+        i = lineStart;
+        continue;
+      }
+      push(i, i); // single word wider than the line: hard split
+      continue;
+    }
+    col += gw;
+    i += g.length;
+    if (g === ' ') lastSpaceEnd = i;
+  }
+  segs.push([lineStart, plain.length]);
+  return segs;
+}
+
 /** Split one logical row into one-or-more physical rows of at most `width`. */
 export function wrapRowToWidth(row: WrappableRow, width: number): WrappableRow[] {
   const w = Math.max(1, width);
@@ -33,79 +89,36 @@ export function wrapRowToWidth(row: WrappableRow, width: number): WrappableRow[]
   if (plain.length === 0) return [row];
   if (!plain.includes('\n') && cellWidth(plain) <= w) return [row];
 
-  const out: WrappableRow[] = [];
-  let lineSpans: AnsiSpan[] = [];
-  let lineLen = 0;
-  let part = 0;
-  let isFirstPhys = true;
+  // Span start offsets in `plain`, to slice styled pieces per segment.
+  const starts: number[] = [];
+  let off = 0;
+  for (const sp of row.spans) {
+    starts.push(off);
+    off += sp.text.length;
+  }
 
-  const lineBudget = () => (isFirstPhys ? w : Math.max(1, w - hang));
-
-  const flush = () => {
-    let spans = lineSpans.length > 0 ? lineSpans : [{ text: '' }];
-    // Hang-indent every physical line after the first so wrapped content
-    // lines up under the role prefix, not under the left margin.
-    if (!isFirstPhys && hang > 0) {
-      const pad = ' '.repeat(hang);
-      spans = [{ text: pad }, ...spans];
-    }
-    out.push({
+  return wrapSegments(plain, w, Math.max(1, w - hang)).map(([from, to], part) => {
+    const spans: AnsiSpan[] = [];
+    row.spans.forEach((sp, k) => {
+      const s0 = Math.max(from, starts[k] ?? 0);
+      const s1 = Math.min(to, (starts[k] ?? 0) + sp.text.length);
+      if (s1 > s0)
+        spans.push({ ...sp, text: sp.text.slice(s0 - (starts[k] ?? 0), s1 - (starts[k] ?? 0)) });
+    });
+    if (spans.length === 0) spans.push({ text: '' });
+    // Hang-indent continuation lines so wrapped content lines up under the
+    // role prefix, not under the left margin.
+    if (part > 0 && hang > 0) spans.unshift({ text: ' '.repeat(hang) });
+    return {
       key: `${row.key}-w${part}`,
       spans,
       baseColor: row.baseColor,
       baseDim: row.baseDim,
       hangIndent: row.hangIndent,
       // Only the first physical line of a collapsible entry is clickable.
-      sourceEntry: isFirstPhys ? row.sourceEntry : undefined,
-    });
-    part += 1;
-    lineSpans = [];
-    lineLen = 0;
-    isFirstPhys = false;
-  };
-
-  for (const span of row.spans) {
-    let i = 0;
-    const text = span.text;
-    while (i < text.length) {
-      const ch = text[i] ?? '';
-      if (ch === '\n') {
-        flush();
-        i += 1;
-        continue;
-      }
-      const budget = lineBudget();
-      if (lineLen >= budget) flush();
-      const room = lineBudget() - lineLen;
-      let take = 0;
-      let consumed = 0;
-      for (const grapheme of graphemes(text.slice(i))) {
-        if (grapheme === '\n' || take + cellWidth(grapheme) > room) break;
-        take += cellWidth(grapheme);
-        consumed += grapheme.length;
-      }
-      if (take === 0) {
-        const first = graphemes(text.slice(i))[0];
-        if (!first) break;
-        consumed = first.length;
-        take = Math.max(1, cellWidth(first));
-      }
-      const piece = text.slice(i, i + consumed);
-      lineSpans.push({
-        text: piece,
-        fg: span.fg,
-        bg: span.bg,
-        bold: span.bold,
-        dim: span.dim,
-        italic: span.italic,
-        underline: span.underline,
-      });
-      lineLen += take;
-      i += consumed;
-    }
-  }
-  if (lineSpans.length > 0 || out.length === 0) flush();
-  return out;
+      sourceEntry: part === 0 ? row.sourceEntry : undefined,
+    };
+  });
 }
 
 /** Expand every logical row; total length is the physical viewport budget. */

@@ -4,7 +4,7 @@
 //   - escaped \n / \t inside the JSON don't bleed through
 
 import { describe, expect, it } from 'vitest';
-import { collapseAssistantProse, formatCompactEvent, initialState, reducer } from './state.js';
+import { formatCompactEvent, initialState, reducer } from './state.js';
 
 const ESC = String.fromCharCode(0x1b);
 const stripAnsi = (s: string) => s.replace(new RegExp(`${ESC}\\[[0-9;]*m`, 'g'), '');
@@ -738,34 +738,8 @@ describe('state.reducer child-progress (↳ expandable)', () => {
   });
 });
 
-describe('collapseAssistantProse', () => {
-  it('leaves short replies alone', () => {
-    const c = collapseAssistantProse('PWNED\nShort note.');
-    expect(c.collapsible).toBe(false);
-    expect(c.preview).toBe(c.full);
-  });
-
-  it('collapses long narrative with a click cue', () => {
-    const body = [
-      'The PHP file was uploaded and executed on the server.',
-      'The upload has no validation.',
-      'This is unrestricted file upload leading to RCE.',
-      'Confirming with coverage tracking next.',
-      'Reporting after reproduction is complete.',
-      'Impact is full remote code execution as www-data.',
-      'Remediation is strict content-type and extension allowlists.',
-      'PoC: upload pwn.php then GET /upload/pwn.php.',
-    ].join('\n');
-    const c = collapseAssistantProse(body);
-    expect(c.collapsible).toBe(true);
-    expect(c.preview).toContain('click to expand');
-    expect(c.preview.length).toBeLessThan(c.full.length);
-    expect(c.full).toContain('PoC: upload pwn.php');
-  });
-});
-
-describe('state.reducer collapsible assistant text', () => {
-  it('collapses a long assistant-text event for click expand', () => {
+describe('state.reducer assistant text', () => {
+  it('keeps a long assistant answer whole (never folded)', () => {
     const body = Array.from({ length: 12 }, (_, i) => `Paragraph ${i} about the finding.`).join(
       '\n',
     );
@@ -775,22 +749,8 @@ describe('state.reducer collapsible assistant text', () => {
     });
     const last = out.transcript.at(-1);
     expect(last?.kind).toBe('assistant');
-    expect(last?.collapsible).toBe(true);
-    expect(last?.text).toContain('click to expand');
-    expect(last?.fullText).toContain('Paragraph 11');
-  });
-
-  it('click toggles the full assistant body in place', () => {
-    const body = Array.from({ length: 12 }, (_, i) => `Line ${i} of analysis.`).join('\n');
-    let s = reducer(seed(), {
-      type: 'agent-event',
-      event: { type: 'assistant-text', text: body },
-    });
-    const full = s.transcript[0]?.fullText;
-    s = reducer(s, { type: 'toggle-expand', fullText: full });
-    expect(s.transcript[0]?.expanded).toBe(true);
-    s = reducer(s, { type: 'toggle-expand', fullText: full });
-    expect(s.transcript[0]?.expanded).toBe(false);
+    expect(last?.collapsible).toBeFalsy();
+    expect(last?.text).toBe(body);
   });
 });
 

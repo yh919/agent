@@ -69,6 +69,7 @@ async function mountApp(overrides: Partial<AppProps> = {}): Promise<TestRenderer
   const setup = await testRender(<App {...makeProps(overrides)} />, {
     width: 100,
     height: 30,
+    exitOnCtrlC: false, // same as production (cli/index.ts): the app owns Ctrl-C
   });
   cleanup = () => setup.renderer.destroy();
   return setup;
@@ -160,8 +161,18 @@ describe('App (OpenTUI)', () => {
     expect(frame).toMatch(/Nothing to copy yet/i);
   });
 
-  it('Ctrl-C aborts an in-flight run and calls onExit', async () => {
+  it('Ctrl-C clears a draft, then needs a second press to exit', async () => {
     const setup = await mountApp();
+    await pressAndFlush(setup, () => setup.mockInput.typeText('half-typed'));
+    await pressAndFlush(setup, () => setup.mockInput.pressCtrlC());
+    expect(onExit).not.toHaveBeenCalled();
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).toContain('Ask anything');
+    expect(setup.captureCharFrame()).not.toContain('half-typed');
+    await pressAndFlush(setup, () => setup.mockInput.pressCtrlC());
+    expect(onExit).not.toHaveBeenCalled();
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).toContain('Press Ctrl+C again to exit');
     await pressAndFlush(setup, () => setup.mockInput.pressCtrlC());
     expect(onExit).toHaveBeenCalledTimes(1);
   });
