@@ -176,7 +176,12 @@ export function newFromConfig(cfg: Config): Client {
         cfg.model || GEMINI_DEFAULT_MODEL,
         // Forward the optional thinking budget so the user can cap/disable
         // Gemini's internal thinking pass — its main latency driver.
-        { ...gen, thinkingBudget: cfg.gemini_thinking_budget },
+        // Unset + thinking off → 512: small cap, still ≥ the 128 minimum Pro
+        // models require (0 is rejected there).
+        {
+          ...gen,
+          thinkingBudget: cfg.gemini_thinking_budget ?? (cfg.thinking_enabled ? undefined : 512),
+        },
       );
     case 'anthropic':
       if (!cfg.api_key) {
