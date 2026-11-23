@@ -134,6 +134,7 @@ export function App({
   listSessions,
   resumeSession,
   permissionRules,
+  backgroundRunning,
 }: AppProps) {
   if (!onExit) throw new Error('OpenTUI App requires onExit from the CLI mount');
   const renderer = useRenderer();
@@ -919,6 +920,21 @@ export function App({
       exitArmedAt.current = Date.now();
       setExitHint(true);
       setTimeout(() => setExitHint(false), 2000);
+      return;
+    }
+    // Ctrl+B: send the running shell command to the background (keeps running,
+    // the turn continues without waiting for it).
+    if (e.ctrl && e.name === 'b' && state.busy) {
+      const id = backgroundRunning?.();
+      dispatch({
+        type: 'append',
+        entry: {
+          kind: 'system',
+          text: id
+            ? `moved to background as ${id} — /jobs to check; you'll get a notice when it ends`
+            : 'no shell command is running right now',
+        },
+      });
       return;
     }
     if (e.name === 'escape' && state.busy) {

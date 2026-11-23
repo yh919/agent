@@ -545,8 +545,11 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
 
   // Tools.
   const tools = new ToolRegistry();
-  tools.register(new ShellTool('/bin/sh', 'shell', backgroundTasks));
-  tools.register(new BashTool(backgroundTasks));
+  const shellTools = [
+    new ShellTool('/bin/sh', 'shell', backgroundTasks),
+    new BashTool(backgroundTasks),
+  ];
+  for (const t of shellTools) tools.register(t);
   tools.register(new BackgroundStatusTool(backgroundTasks));
   tools.register(new FileReadTool());
   tools.register(new FileReadToolAlias());
@@ -1076,6 +1079,14 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     resumeSummary,
     listSessions: () => sessionStore.listDir(sessionDir),
     permissionRules: projectRules,
+    // Ctrl+B: whichever shell tool is running a foreground command detaches it.
+    backgroundRunning: () => {
+      for (const t of shellTools) {
+        const id = t.detachForeground();
+        if (id) return id;
+      }
+      return null;
+    },
     // /resume: remember the pick; after the TUI closes we relaunch into it.
     resumeSession: (id: string) => {
       relaunchResumeID = id;

@@ -331,3 +331,37 @@ describe('Windows shell invocation (issue #11)', () => {
     expect(schema.properties.command.description).toContain('PowerShell');
   });
 });
+
+describe('ShellTool Ctrl+B detach', () => {
+  it.skipIf(process.platform === 'win32')(
+    'moves a running command to the background without restarting it',
+    async () => {
+      const notices: string[] = [];
+      const bg = new BackgroundTaskManager((t) => notices.push(t));
+      const tool = new ShellTool('/bin/sh', 'shell', bg);
+      expect(tool.detachForeground()).toBeNull(); // nothing running yet
+
+      const t0 = Date.now();
+      const run = tool.run(
+        { command: 'echo start; sleep 1; echo finished' },
+        new AbortController().signal,
+        new AlwaysAllow(),
+      );
+      await new Promise((r) => setTimeout(r, 300));
+      const id = tool.detachForeground();
+      expect(id).toBe('bg1');
+      const out = await run;
+      expect(Date.now() - t0).toBeLessThan(900); // returned before the command ended
+      expect(out).toContain('moved to background as task bg1');
+      expect(out).toContain('start');
+
+      await new Promise((r) => setTimeout(r, 1200));
+      const task = bg.get('bg1');
+      expect(task?.status).toBe('done');
+      expect(task?.stdout).toContain('start'); // output before the detach is kept
+      expect(task?.stdout).toContain('finished');
+      expect(notices).toHaveLength(1);
+      expect(tool.detachForeground()).toBeNull();
+    },
+  );
+});

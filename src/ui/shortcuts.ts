@@ -16,6 +16,7 @@ const SHORTCUTS: Array<[group: string, keys: string, what: string]> = [
   ['Control', 'Shift+Tab', 'cycle mode: ask → auto-safe → plan (yolo only via /yolo)'],
   ['Control', 'Esc', 'stop the running turn · clear the draft'],
   ['Control', 'Esc Esc', 'edit and resend an earlier message'],
+  ['Control', 'Ctrl+B', 'send the running shell command to the background'],
   ['Control', 'Ctrl+C', 'stop · clear · press twice to exit'],
   ['View', 'Ctrl+O', 'expand tool output'],
   ['View', 'Ctrl+F', 'filter transcript'],

@@ -52,45 +52,79 @@ export class BackgroundTaskManager {
   }
 
   start(cmd: string, argv: string[], timeoutMs: number, label: string): { id: string } {
+    const controller = new AbortController();
+    let child: ChildProcess;
+    try {
+      child = spawn(cmd, argv, { detached: !isWindows(), signal: controller.signal });
+    } catch (err) {
+      const id = this.newTask(label, Date.now());
+      const task = this.tasks.get(id);
+      if (task) {
+        task.status = 'failed';
+        task.stderr = err instanceof Error ? err.message : String(err);
+        task.finishedAt = Date.now();
+        this.announce(task);
+      }
+      return { id };
+    }
+    return {
+      id: this.track(child, controller, label, timeoutMs, Date.now(), {
+        stdout: new HeadTailBuffer(MAX_OUTPUT_BYTES),
+        stderr: new HeadTailBuffer(MAX_OUTPUT_BYTES),
+      }),
+    };
+  }
+
+  /**
+   * Ctrl+B: take over a command that is already running in the foreground.
+   * Keeps its process, its output so far (the same buffers) and start time.
+   */
+  adopt(
+    child: ChildProcess,
+    controller: AbortController,
+    label: string,
+    timeoutMs: number,
+    startedAt: number,
+    bufs: { stdout: HeadTailBuffer; stderr: HeadTailBuffer },
+  ): string {
+    // The foreground runner's data listeners keep feeding these buffers.
+    return this.track(child, controller, label, timeoutMs, startedAt, bufs, false);
+  }
+
+  private newTask(label: string, startedAt: number): string {
     this.evictOldFinished();
     const id = `bg${this.nextID++}`;
-    const task: BackgroundTask = {
-      id,
-      label,
-      status: 'running',
-      startedAt: Date.now(),
-      stdout: '',
-      stderr: '',
-    };
-    this.tasks.set(id, task);
+    this.tasks.set(id, { id, label, status: 'running', startedAt, stdout: '', stderr: '' });
+    return id;
+  }
 
-    const controller = new AbortController();
+  private track(
+    child: ChildProcess,
+    controller: AbortController,
+    label: string,
+    timeoutMs: number,
+    startedAt: number,
+    bufs: { stdout: HeadTailBuffer; stderr: HeadTailBuffer },
+    attachStreams = true,
+  ): string {
+    const id = this.newTask(label, startedAt);
+    const task = this.tasks.get(id) as BackgroundTask;
     let timedOut = false;
+    const handle: RunningHandle = { pid: child.pid ?? 0, controller };
     const timer = setTimeout(() => {
       timedOut = true;
       killProcessGroup(handle.pid);
       controller.abort();
     }, timeoutMs);
     timer.unref?.();
-
-    let child: ChildProcess;
-    try {
-      child = spawn(cmd, argv, { detached: !isWindows(), signal: controller.signal });
-    } catch (err) {
-      clearTimeout(timer);
-      task.status = 'failed';
-      task.stderr = err instanceof Error ? err.message : String(err);
-      task.finishedAt = Date.now();
-      this.announce(task);
-      return { id };
-    }
-    const handle: RunningHandle = { pid: child.pid ?? 0, controller };
     this.running.set(id, handle);
 
-    const stdoutBuf = new HeadTailBuffer(MAX_OUTPUT_BYTES);
-    const stderrBuf = new HeadTailBuffer(MAX_OUTPUT_BYTES);
-    child.stdout?.on('data', (c: Buffer) => stdoutBuf.push(c));
-    child.stderr?.on('data', (c: Buffer) => stderrBuf.push(c));
+    const stdoutBuf = bufs.stdout;
+    const stderrBuf = bufs.stderr;
+    if (attachStreams) {
+      child.stdout?.on('data', (c: Buffer) => stdoutBuf.push(c));
+      child.stderr?.on('data', (c: Buffer) => stderrBuf.push(c));
+    }
 
     // An aborted signal (kill()/timeout) can fire 'error' (AbortError) and/or
     // 'close' depending on Node version and how far the process got — settle
@@ -125,7 +159,7 @@ export class BackgroundTaskManager {
       finish('failed', undefined);
     });
 
-    return { id };
+    return id;
   }
 
   get(id: string): BackgroundTask | undefined {

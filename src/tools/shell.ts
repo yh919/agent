@@ -232,7 +232,27 @@ export class ShellTool implements Tool {
       );
       return `started as background task ${id} — check progress with background_status (action="get", id="${id}"), or wait for the completion notice.`;
     }
-    return runWithCapture(cmd, argv, timeoutMs, signal);
+    const label = cmdStr.split('\n', 1)[0] ?? cmdStr;
+    return runWithCapture(cmd, argv, timeoutMs, signal, {
+      background: this.background,
+      label: label.length > 80 ? `${label.slice(0, 80)}…` : label,
+      register: (d) => {
+        this.detachCurrent = d;
+      },
+    });
+  }
+
+  /** Set while a foreground command runs; Ctrl+B calls it (see detachForeground). */
+  private detachCurrent: (() => string) | null = null;
+
+  /**
+   * Ctrl+B: move the running foreground command to the background without
+   * restarting it. Returns the task id, or null when nothing is running.
+   */
+  detachForeground(): string | null {
+    const d = this.detachCurrent;
+    this.detachCurrent = null;
+    return d ? d() : null;
   }
 }
 
@@ -320,8 +340,15 @@ function runWithCapture(
   argv: string[],
   timeoutMs: number,
   parentSignal: AbortSignal,
+  fg?: {
+    background?: BackgroundTaskManager;
+    label: string;
+    register: (detach: (() => string) | null) => void;
+  },
 ): Promise<string> {
   return new Promise((resolveOut) => {
+    const startedAt = Date.now();
+    let detached = false;
     const controller = new AbortController();
     let childPid = 0;
     const onParentAbort = () => {
@@ -355,7 +382,31 @@ function runWithCapture(
     child.stdout.on('data', (c: Buffer) => stdoutBuf.push(c));
     child.stderr.on('data', (c: Buffer) => stderrBuf.push(c));
 
+    // Ctrl+B: hand the live child (and its output so far) to the background
+    // manager, stop owning it here, and answer the tool call immediately.
+    const bg = fg?.background;
+    if (bg) {
+      fg.register(() => {
+        detached = true;
+        fg.register(null);
+        clearTimeout(timer);
+        parentSignal.removeEventListener('abort', onParentAbort); // Esc no longer kills it
+        const remaining = Math.max(60_000, MAX_TIMEOUT_MS - (Date.now() - startedAt));
+        const id = bg.adopt(child, controller, fg.label, remaining, startedAt, {
+          stdout: stdoutBuf,
+          stderr: stderrBuf,
+        });
+        const secs = Math.round((Date.now() - startedAt) / 1000);
+        resolveOut(
+          `moved to background as task ${id} after ${secs}s (user pressed Ctrl+B) — it keeps running; check with background_status (action="get", id="${id}") or wait for the completion notice.\noutput so far:\n${stdoutBuf.render()}`,
+        );
+        return id;
+      });
+    }
+
     child.on('close', (code, sig) => {
+      if (detached) return;
+      fg?.register(null);
       clearTimeout(timer);
       parentSignal.removeEventListener('abort', onParentAbort);
       const stdout = stdoutBuf.render();
@@ -375,6 +426,8 @@ function runWithCapture(
     });
 
     child.on('error', (err) => {
+      if (detached) return;
+      fg?.register(null);
       if (controller.signal.aborted && err.name === 'AbortError') return;
       clearTimeout(timer);
       parentSignal.removeEventListener('abort', onParentAbort);

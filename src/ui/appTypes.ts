@@ -63,4 +63,6 @@ export interface AppProps {
   resumeSession?: (id: string) => void;
   /** /permissions: this project's "don't ask again" rules. */
   permissionRules?: { list(): string[]; remove(rule: string): void };
+  /** Ctrl+B: move the running shell command to the background; task id or null. */
+  backgroundRunning?: () => string | null;
 }
