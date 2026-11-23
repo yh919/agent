@@ -17,7 +17,7 @@ import type { Client, StreamingClient } from '../llm/client.js';
 import { isStreaming } from '../llm/client.js';
 import type { RetryInfo } from '../llm/retry.js';
 import type { ChatRequest, Message, ToolCall } from '../llm/types.js';
-import { parsedArgs } from '../llm/types.js';
+import { TURN_CONTEXT_MARKER, parsedArgs } from '../llm/types.js';
 import { error as logError } from '../logger/logger.js';
 import type { MemoryProvider } from '../memoryProvider/types.js';
 import type { Prompter } from '../permission/permission.js';
@@ -1058,7 +1058,10 @@ export class Agent {
     }
     const system = working[0];
     if (extraSystemContext.length > 0 && system) {
-      working[0] = { ...system, content: [system.content, ...extraSystemContext].join('\n\n') };
+      working[0] = {
+        ...system,
+        content: system.content + TURN_CONTEXT_MARKER + extraSystemContext.join('\n\n'),
+      };
     }
     if (last) last.content = expandedUserMsg;
 

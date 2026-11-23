@@ -81,3 +81,11 @@ export function parsedArgs(call: FunctionCall): Record<string, unknown> {
   if (!call.arguments) return {};
   return JSON.parse(call.arguments) as Record<string, unknown>;
 }
+
+/**
+ * Separates the stable system prompt from per-turn context (skill route,
+ * memory recall) that the agent appends. Session-reusing backends keep the
+ * part before it byte-identical across calls so the provider's prompt cache
+ * hits, and send what follows as a small per-turn note instead.
+ */
+export const TURN_CONTEXT_MARKER = '\n\n<!-- per-turn context -->\n\n';

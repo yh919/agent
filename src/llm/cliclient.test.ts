@@ -1,9 +1,9 @@
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CliClient, extractToolCalls } from './cliclient.js';
-import type { ToolSpec } from './types.js';
+import { type Message, TURN_CONTEXT_MARKER, type ToolSpec } from './types.js';
 
 const tool: ToolSpec = {
   type: 'function',
@@ -15,10 +15,13 @@ const bin = mkdtempSync(join(tmpdir(), 'fake-claude-'));
 writeFileSync(
   join(bin, 'claude'),
   `#!/usr/bin/env node
+const fs = require('node:fs');
+// Record argv + stdin so tests can check what was sent.
+if (process.env.FAKE_LOG) fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ argv: process.argv.slice(2), stdin: fs.readFileSync(0, 'utf8') }) + '\\n');
 const t = process.env.FAKE_REPLY, h = Math.ceil(t.length / 2);
 for (const p of [t.slice(0, h), t.slice(h)])
-  console.log(JSON.stringify({ type: 'stream_event', event: { delta: { type: 'text_delta', text: p } } }));
-console.log(JSON.stringify({ type: 'result', is_error: false, usage: { input_tokens: 3, output_tokens: 5 } }));
+  console.log(JSON.stringify({ type: 'stream_event', session_id: 'sess-1', event: { delta: { type: 'text_delta', text: p } } }));
+console.log(JSON.stringify({ type: 'result', session_id: 'sess-1', is_error: false, usage: { input_tokens: 3, output_tokens: 5 } }));
 `,
 );
 chmodSync(join(bin, 'claude'), 0o755);
@@ -67,5 +70,49 @@ describe('CliClient (claude-code)', () => {
     expect(extractToolCalls('{"tool_calls":[{"name":"rm","arguments":{}}]}', known)).toHaveLength(
       0,
     );
+  });
+});
+
+describe('CliClient session reuse (claude-code)', () => {
+  it('resumes with only new messages, re-sends turn context only when it changes, restarts on rewind', async () => {
+    const log = join(mkdtempSync(join(tmpdir(), 'fake-log-')), 'calls.jsonl');
+    process.env.FAKE_LOG = log;
+    process.env.FAKE_REPLY = 'ok';
+    const c = new CliClient('claude-code', 'default');
+    const sys = (extra: string): Message => ({
+      role: 'system',
+      content: `BASE${TURN_CONTEXT_MARKER}${extra}`,
+    });
+    const m1: Message[] = [sys('route A'), { role: 'user', content: 'first question' }];
+    const r1 = await c.chat({ model: 'default', messages: m1 });
+    const m2 = [...m1, r1.message, { role: 'user' as const, content: 'second question' }];
+    const r2 = await c.chat({ model: 'default', messages: m2 });
+    const m3 = [
+      sys('route B'),
+      ...m2.slice(1),
+      r2.message,
+      { role: 'user' as const, content: 'third' },
+    ];
+    await c.chat({ model: 'default', messages: m3 });
+    // Rewind: history no longer extends what the session holds.
+    await c.chat({
+      model: 'default',
+      messages: [sys('route B'), { role: 'user', content: 'edited first' }],
+    });
+    process.env.FAKE_LOG = '';
+
+    const calls = readFileSync(log, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l)) as Array<{ argv: string[]; stdin: string }>;
+    const sysArg = (a: string[]) => a[a.indexOf('--system-prompt') + 1];
+    expect(calls.map((c) => c.argv.includes('--resume'))).toEqual([false, true, true, false]);
+    expect(calls.every((c) => sysArg(c.argv) === 'BASE')).toBe(true); // stable → cacheable
+    expect(calls[0]?.stdin).toContain('<turn-context>\nroute A');
+    expect(calls[1]?.stdin).not.toContain('first question');
+    expect(calls[1]?.stdin).toContain('second question');
+    expect(calls[1]?.stdin).not.toContain('turn-context'); // unchanged → not re-sent
+    expect(calls[2]?.stdin).toContain('route B');
+    expect(calls[3]?.stdin).toContain('edited first');
   });
 });

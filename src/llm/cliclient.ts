@@ -14,7 +14,14 @@ import { delimiter, dirname, join } from 'node:path';
 import type { StreamingClient } from './client.js';
 import { parseContentToolCalls } from './contentToolCalls.js';
 import { newCallID } from './ids.js';
-import type { ChatRequest, ChatResponse, Message, ToolSpec, Usage } from './types.js';
+import {
+  type ChatRequest,
+  type ChatResponse,
+  type Message,
+  TURN_CONTEXT_MARKER,
+  type ToolSpec,
+  type Usage,
+} from './types.js';
 
 export type CliBackend = 'claude-code' | 'codex' | 'gemini-cli';
 
@@ -53,25 +60,30 @@ function toolProtocol(tools: ToolSpec[]): string {
   return `\n\n# Tools\nYou cannot run anything yourself; the host runs these tools for you:\n${list}\n\nTo call tools, reply with ONLY this JSON and nothing else (no prose, no code fence):\n{"tool_calls":[{"name":"<tool>","arguments":{...}}]}\nResults come back as <tool_result> blocks. When no tool is needed, reply in plain text.`;
 }
 
+/** One non-system message as transcript text. */
+export function renderMessage(m: Message): string {
+  if (m.role === 'tool') {
+    return `<tool_result name="${m.name ?? ''}" id="${m.toolCallID ?? ''}">\n${m.content}\n</tool_result>`;
+  }
+  if (m.role === 'assistant') {
+    const calls = m.toolCalls?.length
+      ? `\n${JSON.stringify({ tool_calls: m.toolCalls.map((c) => ({ name: c.function.name, arguments: JSON.parse(c.function.arguments || '{}') })) })}`
+      : '';
+    return `<assistant>\n${m.content}${calls}\n</assistant>`;
+  }
+  return `<user>\n${m.content}\n</user>`;
+}
+
+const CONTINUE = '\n\nContinue as the assistant. Reply with your next message only.';
+
 /** Render the conversation (minus system) as one text transcript. */
 export function renderTranscript(messages: Message[]): string {
-  const out: string[] = [];
-  for (const m of messages) {
-    if (m.role === 'system') continue;
-    if (m.role === 'tool') {
-      out.push(
-        `<tool_result name="${m.name ?? ''}" id="${m.toolCallID ?? ''}">\n${m.content}\n</tool_result>`,
-      );
-    } else if (m.role === 'assistant') {
-      const calls = m.toolCalls?.length
-        ? `\n${JSON.stringify({ tool_calls: m.toolCalls.map((c) => ({ name: c.function.name, arguments: JSON.parse(c.function.arguments || '{}') })) })}`
-        : '';
-      out.push(`<assistant>\n${m.content}${calls}\n</assistant>`);
-    } else {
-      out.push(`<user>\n${m.content}\n</user>`);
-    }
-  }
-  return `${out.join('\n\n')}\n\nContinue as the assistant. Reply with your next message only.`;
+  return (
+    messages
+      .filter((m) => m.role !== 'system')
+      .map(renderMessage)
+      .join('\n\n') + CONTINUE
+  );
 }
 
 /** Tool calls from reply text: the whole reply, else the trailing {"tool_calls"…} object. */
@@ -84,7 +96,13 @@ export function extractToolCalls(text: string, known: Set<string>) {
 
 export class CliClient implements StreamingClient {
   // Empty scratch dir: CLIs that keep read-only tools see nothing of the user's tree.
-  private readonly cwd = mkdtempSync(join(tmpdir(), 'pentesterflow-cli-'));
+  private readonly cwd = mkdtempSync(join(tmpdir(), 'lepus-cli-'));
+  /**
+   * Claude Code session reused across calls: only messages it hasn't seen are
+   * sent, and the system prompt stays byte-identical so the prompt cache hits.
+   * `sent` is the rendered transcript the session already holds.
+   */
+  private session?: { id: string; base: string; extra: string; sent: string[] };
 
   constructor(
     private readonly backend: CliBackend,
@@ -103,7 +121,7 @@ export class CliClient implements StreamingClient {
     return this.chatStream(req, () => {}, signal);
   }
 
-  private argv(system: string): string[] {
+  private argv(system: string, resumeID?: string): string[] {
     const m = this.modelID && this.modelID !== 'default' ? ['--model', this.modelID] : [];
     switch (this.backend) {
       case 'claude-code':
@@ -118,9 +136,9 @@ export class CliClient implements StreamingClient {
           '--strict-mcp-config',
           '--setting-sources',
           '',
-          '--no-session-persistence',
           '--system-prompt',
           system,
+          ...(resumeID ? ['--resume', resumeID] : []),
           ...m,
         ];
       case 'codex':
@@ -147,20 +165,48 @@ export class CliClient implements StreamingClient {
     signal?: AbortSignal,
   ): Promise<ChatResponse> {
     const tools = req.tools ?? [];
-    const system =
-      req.messages
-        .filter((m) => m.role === 'system')
-        .map((m) => m.content)
-        .join('\n\n') + toolProtocol(tools);
-    const transcript = renderTranscript(req.messages);
-    // Only Claude Code takes a separate system prompt; the others get it inline.
-    const stdin = this.backend === 'claude-code' ? transcript : `${system}\n\n${transcript}`;
+    const sys = req.messages
+      .filter((m) => m.role === 'system')
+      .map((m) => m.content)
+      .join('\n\n');
+    const cut = sys.indexOf(TURN_CONTEXT_MARKER);
+    const base = (cut >= 0 ? sys.slice(0, cut) : sys) + toolProtocol(tools);
+    const extra = cut >= 0 ? sys.slice(cut + TURN_CONTEXT_MARKER.length).trim() : '';
+    const blocks = req.messages.filter((m) => m.role !== 'system').map(renderMessage);
+
+    let system: string;
+    let stdin: string;
+    let resumeID: string | undefined;
+    let sessExtra = ''; // turn-context the session holds after this call
+    if (this.backend === 'claude-code') {
+      // Reuse the session when its system prompt and transcript are a prefix of
+      // this request (rewind / compaction / provider swap → fresh session).
+      const sess = this.session;
+      const reuse =
+        sess &&
+        sess.base === base &&
+        sess.sent.length <= blocks.length &&
+        sess.sent.every((b, i) => b === blocks[i]);
+      resumeID = reuse ? sess.id : undefined;
+      const fresh = reuse ? blocks.slice(sess.sent.length) : blocks;
+      const sendExtra = extra && !(reuse && sess.extra === extra);
+      sessExtra = sendExtra ? extra : reuse ? sess.extra : '';
+      system = base;
+      stdin =
+        (sendExtra ? `<turn-context>\n${extra}\n</turn-context>\n\n` : '') +
+        fresh.join('\n\n') +
+        CONTINUE;
+    } else {
+      // Codex / Gemini CLI: stateless, whole prompt inline every call.
+      system = extra ? `${base}\n\n${extra}` : base;
+      stdin = `${system}\n\n${blocks.join('\n\n')}${CONTINUE}`;
+    }
 
     // An exported API key would bill the API instead of the signed-in plan.
     const { ANTHROPIC_API_KEY: _apiKey, ...noKey } = process.env;
     const env = this.backend === 'claude-code' ? noKey : process.env;
     const { bin, login } = CLI_BACKENDS[this.backend];
-    const child = spawn(bin, this.argv(system), {
+    const child = spawn(bin, this.argv(system, resumeID), {
       cwd: this.cwd,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -173,6 +219,7 @@ export class CliClient implements StreamingClient {
     let usage: Usage | undefined;
     let failure = '';
     let stderr = '';
+    let sessionID = '';
     // Hold back output that looks like a tool-call JSON reply so raw JSON never flashes in the UI.
     const push = (s: string) => {
       text += s;
@@ -185,6 +232,7 @@ export class CliClient implements StreamingClient {
     const onEvent = (ev: Record<string, any>) => {
       switch (this.backend) {
         case 'claude-code':
+          if (typeof ev.session_id === 'string') sessionID = ev.session_id;
           if (ev.type === 'rate_limit_event') savePlanUsage(ev.rate_limit_info);
           else if (ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta')
             push(ev.event.delta.text);
@@ -255,12 +303,39 @@ export class CliClient implements StreamingClient {
       child.stdin.end(stdin);
     }).finally(() => signal?.removeEventListener('abort', kill));
 
-    if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    if (signal?.aborted) {
+      this.session = undefined; // the CLI may hold a half-written turn
+      throw new DOMException('aborted', 'AbortError');
+    }
+    if ((failure || code !== 0) && resumeID) {
+      // Resume failed (session expired / pruned): retry once from scratch.
+      this.session = undefined;
+      return this.chatStream(req, onDelta, signal);
+    }
     if (failure || code !== 0) {
       const why = failure || stderr.trim().split('\n').slice(-3).join(' ') || `exit ${code}`;
       throw new Error(`${this.backend}: ${why} — if signed out, run \`${login}\``);
     }
 
+    const res = this.toResponse(text, tools, usage, onDelta, shown);
+    if (this.backend === 'claude-code' && sessionID) {
+      this.session = {
+        id: sessionID,
+        base,
+        extra: sessExtra,
+        sent: [...blocks, renderMessage(res.message)],
+      };
+    }
+    return res;
+  }
+
+  private toResponse(
+    text: string,
+    tools: ToolSpec[],
+    usage: Usage | undefined,
+    onDelta: (delta: string) => void,
+    shown: number,
+  ): ChatResponse {
     const calls = extractToolCalls(text, new Set(tools.map((t) => t.function.name)));
     if (calls.length) {
       return {
