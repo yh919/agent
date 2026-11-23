@@ -2,8 +2,10 @@
 // HTML tags stripped; web_search hits DuckDuckGo's HTML endpoint and
 // parses the top results.
 
+import { fetch as undiciFetch } from 'undici';
 import type { Prompter } from '../permission/permission.js';
 import type { ScopeStore } from '../target/scope.js';
+import { pinnedAgent } from './pinnedDispatcher.js';
 import { gatePrivateRequest, parseHTTPURL } from './privateHost.js';
 import { gateOutOfScope } from './scopeGate.js';
 import { type Tool, argString } from './types.js';
@@ -109,7 +111,14 @@ export class WebFetchTool implements Tool {
     const url = argString(args, 'url');
     if (!url) throw new Error('url is required');
     const parsed = parseHTTPURL(url);
-    const privateReason = await gatePrivateRequest(p, parsed, signal, 'web_fetch');
+    // The gate resolves the host once; we pin those addresses on the connection
+    // so the fetch cannot re-resolve to a different IP (H2 DNS-rebinding fix).
+    const { reason: privateReason, addresses } = await gatePrivateRequest(
+      p,
+      parsed,
+      signal,
+      'web_fetch',
+    );
     const scopeReason = await gateOutOfScope(p, parsed, signal, 'web_fetch', this.scope);
 
     // Cache-check after the private-host/scope gates so a repeat gated fetch
@@ -121,9 +130,17 @@ export class WebFetchTool implements Tool {
     const inner = AbortSignal.timeout(FETCH_TIMEOUT_MS);
     const combined = anySignal(signal, inner);
 
-    let resp: Response;
+    // TLS verification stays ON for web_fetch (public research surface), so the
+    // pinned agent uses rejectUnauthorized:true. null for literal-IP hosts.
+    const pinned = pinnedAgent({
+      addresses,
+      rejectUnauthorized: true,
+      timeoutMs: FETCH_TIMEOUT_MS,
+    });
+
+    let resp: Awaited<ReturnType<typeof undiciFetch>>;
     try {
-      resp = await fetch(url, {
+      resp = await undiciFetch(url, {
         method: 'GET',
         redirect: 'manual',
         headers: {
@@ -131,13 +148,20 @@ export class WebFetchTool implements Tool {
           'User-Agent': 'Mozilla/5.0 lepus/0.1 (+research)',
         },
         signal: combined,
+        ...(pinned ? { dispatcher: pinned } : {}),
       });
     } catch (err) {
+      if (pinned) await pinned.close();
       if (signal.aborted) throw err;
       // Failures are not cached.
       return formatFetchFailure(url, err, inner.aborted);
     }
-    const raw = await readCapped(resp.body, FETCH_BODY_CAP);
+    let raw: string;
+    try {
+      raw = await readCapped(resp.body, FETCH_BODY_CAP);
+    } finally {
+      if (pinned) await pinned.close();
+    }
     let text = stripHTML(raw);
     if (text.length > FETCH_TEXT_CAP) {
       text = `${text.slice(0, FETCH_TEXT_CAP)}\n[... truncated ...]`;

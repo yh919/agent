@@ -19,7 +19,7 @@ Severity legend: **HIGH** = security bypass / RCE primitive / crash / silent dat
 All previously fixable HIGH/MED/LOW items from the 2026-06-10 snapshot have been addressed in source (confirmed by re-review + 654 tests green).
 
 **Remaining accepted (intentional, not changed):**
-- H2 (DNS rebinding) — kept permissive + added non-blocking "note: private/internal host approved..." trace in http + web_fetch tool results for visibility without blocking capability.
+- H2 (DNS rebinding) — **now FIXED** (2026-11): resolve-once + IP pinning on connect (`resolvePrivateHost` + `pinnedLookup` + `pinnedDispatcher.ts`). Capability-preserving — approved internal/metadata hosts are still reached at the vetted IP; only the silent re-resolve swap is closed. The non-blocking "note: private/internal host approved..." trace is retained.
 - L6 (redaction high-entropy) — inherent limitation; added one extra conservative long-token pattern + docs.
 - L9 (debug logs) — improved: sessionDebug now applies the standard redactor by default (structure preserved, secrets masked). Still opt-in + local.
 
@@ -42,11 +42,9 @@ See also the concise list in the review session output and the new `/memory inte
 > tests passing). **35 of 39 findings are fixed.** The remaining 4 are accepted decisions, not open
 > defects.
 
-- **Fixed (35):** H1, H3, H4, H5, H6, H7, H8, H9, H10 · M1–M14 (all) · L1, L2, L3, L4, L5, L7, L8,
-  L11, L12, L13, L14, L15.
-- **Accepted — won't change (3):**
-  - **H2** (DNS-rebinding SSRF) — keep permissive; reaching internal/metadata IPs is often the
-    engagement goal. See the 🟡 row in the triage table.
+- **Fixed (36):** H1, **H2**, H3, H4, H5, H6, H7, H8, H9, H10 · M1–M14 (all) · L1, L2, L3, L4, L5,
+  L7, L8, L11, L12, L13, L14, L15.
+- **Accepted — won't change (2):**
   - **L9** (debug log writes unredacted tool I/O) — opt-in, `0o600`, local-only; the operator's
     explicit choice. See the ⛔ row.
   - **L6** (no generic high-entropy redaction fallback) — inherent to label-anchored redaction.
@@ -77,12 +75,13 @@ PentesterFlow's mission is to help authorized pentesters/bug-hunters/security-en
 |---|---|---|
 | ✅ **Fix freely** | Pure reliability / anti-crash / anti-data-loss / stop operator's own secrets leaking. *Increases* mission effectiveness. | H1, H6, H7, H8, H9, H10, M4, M5, M6, M7, M8, M9, M10, M11, M12, M13, M14, L1–L8, L11–L15 |
 | ⚠️ **Fix capability-preserving** | Make the *local-machine* gate actually catch what it claims — but keep it a **prompt with allow-session**, and YOLO still bypasses. No new friction on target work. | H3, H4, H5, M1, M2, M3 |
-| 🟡 **Optional / keep permissive** | The SSRF rebinding gap. Reaching internal/metadata IPs is often the *goal*. Recommend **not** pinning IPs (that would break legitimate internal testing). At most, a **non-blocking notice** "resolved host is internal" — never a block. | H2 |
+| 🟢 **Fixed, capability-preserving** | The SSRF rebinding gap. Resolve once, then **pin the vetted IP(s)** on connect. Reaching internal/metadata IPs is still fully possible after the operator approves the prompt (we connect to the exact vetted IP; YOLO still auto-approves) — only the *silent* re-resolve to a never-prompted IP is closed, so legitimate internal testing is unaffected. | H2 |
 | ⛔ **Intentional — do NOT change** | Core "without limits" design. | TLS-off HTTP · YOLO mode · no redirect-following · denylist as soft defense-in-depth · scanners in `full` tooling profile · `requires_permission:false` plugin default · opt-in unredacted debug log (L9, operator's explicit choice) |
 
 Net: of 39 findings, **33 are pure operator-benefit** (crashes, leaks of *your* secrets, OOM,
 data loss, wrong output), **6 are capability-preserving gate hardening**, and the only
-capability-sensitive one (H2) is best left permissive. **Nothing here adds limits to target work.**
+capability-sensitive one (H2) is now fixed by resolve-once + IP pinning, which preserves full
+reach to approved internal/metadata hosts. **Nothing here adds limits to target work.**
 
 ---
 
@@ -101,16 +100,23 @@ would treat as inert data. The denylist won't catch it (no `rm`/`shutdown` token
 *creates* an exec primitive out of "just grepping" intent.
 **Fix:** treat the pattern as data — pass via `@ARGV`/`\Q…\E` or `qr` without interpolation.
 
-### H2 — SSRF gate is defeated by DNS rebinding (resolve-then-connect TOCTOU)
-`src/tools/privateHost.ts:64-74` (gate resolves) vs `src/tools/http.ts:131`, `src/tools/web.ts:61` (connect)
+### H2 — SSRF gate is defeated by DNS rebinding (resolve-then-connect TOCTOU) — ✅ FIXED
+`src/tools/privateHost.ts` (gate resolves) vs `src/tools/http.ts`, `src/tools/web.ts` (connect)
 
-The gate resolves the hostname to decide whether to prompt, then hands the **hostname string**
-(not the vetted IP) to undici/fetch, which **re-resolves independently**. A short-TTL attacker
+The gate resolved the hostname to decide whether to prompt, then handed the **hostname string**
+(not the vetted IP) to undici/fetch, which **re-resolved independently**. A short-TTL attacker
 domain returns a public IP on the first lookup (→ no prompt) and `127.0.0.1` /
 `169.254.169.254` on the connect lookup. Result: **silent SSRF to loopback/RFC1918/cloud
-metadata with no prompt at all.** This is the single most serious gap.
-**Fix:** resolve once in the gate and pin that IP for the connection (custom undici
-`connect`/`lookup` that only allows the vetted address).
+metadata with no prompt at all.** This was the single most serious gap.
+
+**Fixed (capability-preserving):** `resolvePrivateHost()` now resolves the host **once** in the
+gate and returns the vetted addresses; `http` and `web_fetch` build a per-request undici
+dispatcher whose custom `lookup` (`pinnedLookup`, `pinnedDispatcher.ts`) **pins exactly those
+addresses** on the connection, so undici cannot re-resolve to a different IP. This does **not**
+limit the operator: an internal/metadata host the operator approves is still reached (we connect
+to the exact IP the gate vetted), and YOLO still auto-approves the prompt. What is removed is only
+the *silent* swap to a never-prompted address between check and connect. Literal-IP hosts need no
+pinning (no DNS step to race) and fall through to the shared dispatcher.
 
 ### H3 — Sensitive-path gate: case-insensitive bypass on macOS
 `src/tools/sensitive.ts:42-56` (compares with `===`/`startsWith`, case-sensitive)

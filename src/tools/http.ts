@@ -10,6 +10,7 @@ import { Agent, fetch as undiciFetch } from 'undici';
 import type { Prompter } from '../permission/permission.js';
 import type { ScopeStore } from '../target/scope.js';
 import type { Target } from '../target/target.js';
+import { pinnedAgent } from './pinnedDispatcher.js';
 import { gatePrivateRequest, parseHTTPURL } from './privateHost.js';
 import { gateOutOfScope } from './scopeGate.js';
 import { type Tool, argString } from './types.js';
@@ -109,8 +110,15 @@ export class HTTPTool implements Tool {
     const resolved = this.resolveURL(rawURL);
     const parsedURL = parseHTTPURL(resolved);
     // SSRF guard: a request whose host is (or resolves to) a private/internal
-    // address requires an explicit, non-cached approval — even in YOLO.
-    const privateReason = await gatePrivateRequest(p, parsedURL, signal, 'http');
+    // address requires an explicit, non-cached approval — even in YOLO. The
+    // gate resolves the host once and hands back the addresses we pin on the
+    // connection below (H2 DNS-rebinding fix).
+    const { reason: privateReason, addresses } = await gatePrivateRequest(
+      p,
+      parsedURL,
+      signal,
+      'http',
+    );
     // Engagement scope guard: a host outside the configured /scope requires
     // an explicit, non-cached approval (or is hard-blocked if explicitly
     // denied). No-op when no scope has been configured.
@@ -127,23 +135,43 @@ export class HTTPTool implements Tool {
       headers.set('user-agent', 'lepus/0.1');
     }
 
+    // Pin the gate-resolved address(es) for this connection so undici cannot
+    // re-resolve the hostname to a different (e.g. internal) IP (H2). Falls back
+    // to the shared dispatcher for literal-IP hosts, where there is no DNS step
+    // to race. The per-request agent is closed in finally to avoid leaking it.
+    const pinned = pinnedAgent({
+      addresses,
+      rejectUnauthorized: false,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    });
+
     const init: Parameters<typeof undiciFetch>[1] = {
       method,
       headers,
       // No automatic redirect following — pentesters want to see the 30x.
       redirect: 'manual',
       signal,
-      dispatcher: insecureDispatcher,
+      dispatcher: pinned ?? insecureDispatcher,
     };
     if (body) init.body = body;
 
-    const resp = await undiciFetch(resolved, init);
+    let raw: Uint8Array;
+    let status: number;
+    let statusText: string;
+    let respHeaders: Headers;
+    try {
+      const resp = await undiciFetch(resolved, init);
+      // Cap response body so a multi-MB download can't bloat the context.
+      raw = await readCapped(resp.body, RESPONSE_BYTE_CAP);
+      status = resp.status;
+      statusText = resp.statusText;
+      respHeaders = resp.headers;
+    } finally {
+      if (pinned) await pinned.close();
+    }
 
-    // Cap response body so a multi-MB download can't bloat the context.
-    const raw = await readCapped(resp.body, RESPONSE_BYTE_CAP);
-
-    let out = `HTTP/1.1 ${resp.status} ${resp.statusText}\n`;
-    for (const [k, v] of resp.headers.entries()) {
+    let out = `HTTP/1.1 ${status} ${statusText}\n`;
+    for (const [k, v] of respHeaders.entries()) {
       out += `${k}: ${v}\n`;
     }
     out += '\n';

@@ -3,21 +3,37 @@ import { AlwaysDeny } from '../permission/permission.js';
 import type { Prompter } from '../permission/permission.js';
 import { WebFetchTool, WebSearchTool, clearWebCache } from './web.js';
 
+// web_fetch now routes through undici with a pinned dispatcher (H2 fix), so we
+// mock undici's fetch rather than the global one. web_search still uses the
+// global fetch, so its tests stub that below.
+const undiciFetchMock = vi.hoisted(() => vi.fn());
+vi.mock('undici', () => ({
+  Agent: class Agent {
+    async close(): Promise<void> {}
+  },
+  fetch: undiciFetchMock,
+}));
+
+// Keep DNS resolution deterministic and offline: any name resolves to a public
+// IP so the private-host gate does not prompt for ordinary public fetches, and
+// the resolved address is what web_fetch pins on the connection.
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]),
+}));
+
 const prompter = {} as Prompter;
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  undiciFetchMock.mockReset();
   // Clear cross-test cache state so each case exercises the cold network path.
   clearWebCache();
 });
 
 describe('WebFetchTool', () => {
   it('returns readable text for successful fetches', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(
-        async () => new Response('<html><body><h1>Hello</h1><script>x()</script></body></html>'),
-      ),
+    undiciFetchMock.mockResolvedValue(
+      new Response('<html><body><h1>Hello</h1><script>x()</script></body></html>'),
     );
 
     const out = await new WebFetchTool().run(
@@ -38,12 +54,9 @@ describe('WebFetchTool', () => {
       code: 'ENOTFOUND',
       hostname: 'platform.hackerone.com',
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new TypeError('fetch failed', { cause });
-      }),
-    );
+    undiciFetchMock.mockImplementation(async () => {
+      throw new TypeError('fetch failed', { cause });
+    });
 
     const out = await new WebFetchTool().run(
       { url: 'https://platform.hackerone.com/hackerone/policy_scopes' },
@@ -60,12 +73,9 @@ describe('WebFetchTool', () => {
   it('rethrows when the caller aborts the request', async () => {
     const ctl = new AbortController();
     ctl.abort();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new Error('aborted');
-      }),
-    );
+    undiciFetchMock.mockImplementation(async () => {
+      throw new Error('aborted');
+    });
 
     await expect(
       new WebFetchTool().run({ url: 'https://example.com' }, ctl.signal, prompter),
@@ -73,9 +83,6 @@ describe('WebFetchTool', () => {
   });
 
   it('prompts before fetching private or local URLs', async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal('fetch', fetch);
-
     await expect(
       new WebFetchTool().run(
         { url: 'http://127.0.0.1:3000/status' },
@@ -83,14 +90,13 @@ describe('WebFetchTool', () => {
         new AlwaysDeny(),
       ),
     ).rejects.toThrow(/private\/internal URL denied/);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(undiciFetchMock).not.toHaveBeenCalled();
   });
 
   it('does not automatically follow redirects', async () => {
-    const fetch = vi.fn(
-      async () => new Response('', { status: 302, headers: { location: 'http://127.0.0.1/' } }),
+    undiciFetchMock.mockResolvedValue(
+      new Response('', { status: 302, headers: { location: 'http://127.0.0.1/' } }),
     );
-    vi.stubGlobal('fetch', fetch);
 
     await new WebFetchTool().run(
       { url: 'https://example.com/redirect' },
@@ -98,16 +104,28 @@ describe('WebFetchTool', () => {
       prompter,
     );
 
-    expect(fetch).toHaveBeenCalledWith(
+    expect(undiciFetchMock).toHaveBeenCalledWith(
       'https://example.com/redirect',
       expect.objectContaining({ redirect: 'manual' }),
     );
   });
 
-  it('prompts before fetching IPv4-mapped IPv6 private URLs', async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal('fetch', fetch);
+  it('pins the gate-resolved address on the connection (H2)', async () => {
+    undiciFetchMock.mockResolvedValue(new Response('<p>ok</p>'));
 
+    await new WebFetchTool().run(
+      { url: 'https://example.com/path' },
+      new AbortController().signal,
+      prompter,
+    );
+
+    // A public host still resolves to an address, so the fetch is pinned via a
+    // per-request dispatcher rather than left to re-resolve.
+    const call = undiciFetchMock.mock.calls[0];
+    expect(call?.[1]).toHaveProperty('dispatcher');
+  });
+
+  it('prompts before fetching IPv4-mapped IPv6 private URLs', async () => {
     await expect(
       new WebFetchTool().run(
         { url: 'http://[::ffff:169.254.169.254]/latest/meta-data/' },
@@ -115,7 +133,7 @@ describe('WebFetchTool', () => {
         new AlwaysDeny(),
       ),
     ).rejects.toThrow(/private\/internal URL denied/);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(undiciFetchMock).not.toHaveBeenCalled();
   });
 
   it('rejects non-HTTP URL schemes', async () => {
@@ -125,8 +143,7 @@ describe('WebFetchTool', () => {
   });
 
   it('serves a second fetch of the same URL from cache without re-hitting the network', async () => {
-    const fetch = vi.fn(async () => new Response('<p>cached body</p>'));
-    vi.stubGlobal('fetch', fetch);
+    undiciFetchMock.mockResolvedValue(new Response('<p>cached body</p>'));
 
     const first = await new WebFetchTool().run(
       { url: 'https://example.com/advisory' },
@@ -140,14 +157,13 @@ describe('WebFetchTool', () => {
     );
 
     expect(second).toBe(first);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(undiciFetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not cache failed fetches', async () => {
-    const fetch = vi.fn(async () => {
+    undiciFetchMock.mockImplementation(async () => {
       throw new TypeError('fetch failed');
     });
-    vi.stubGlobal('fetch', fetch);
 
     await new WebFetchTool().run(
       { url: 'https://example.com/down' },
@@ -159,7 +175,7 @@ describe('WebFetchTool', () => {
       new AbortController().signal,
       prompter,
     );
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(undiciFetchMock).toHaveBeenCalledTimes(2);
   });
 });
 
