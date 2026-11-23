@@ -54,7 +54,14 @@ export function newFromConfig(cfg: Config): Client {
   }
 
   // Signed-in agent CLIs: no key, the CLI holds the subscription login.
-  if (isCliBackend(cfg.backend)) return new CliClient(cfg.backend, cfg.model, cfg.effort);
+  // No explicit effort + thinking off → 'low', so the CLI's high-effort default
+  // doesn't burn plan tokens on thinking the user switched off.
+  if (isCliBackend(cfg.backend))
+    return new CliClient(
+      cfg.backend,
+      cfg.model,
+      cfg.effort || (cfg.thinking_enabled ? '' : 'low'),
+    );
 
   switch (cfg.backend) {
     case 'ollama':
