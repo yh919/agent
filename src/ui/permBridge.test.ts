@@ -153,3 +153,34 @@ describe('BridgedPrompter concurrency (E1)', () => {
     expect(maxOpen).toBe(1); // the queued asks never re-opened a modal
   });
 });
+
+describe('BridgedPrompter project rules', () => {
+  it('[p] saves a rule that pre-approves later matches, but never sensitive requests', async () => {
+    const saved: string[] = [];
+    const rules = { list: () => saved, add: (r: string) => saved.push(r), remove: () => {} };
+    let shown: PermissionRequest | null = null;
+    const p = new BridgedPrompter((req) => {
+      if (req) shown = req;
+    }, rules as never);
+    const curl = (cmd: string, extra: Partial<Request> = {}): Request => ({
+      tool: 'shell',
+      summary: cmd,
+      detail: cmd,
+      cacheKey: cmd,
+      ...extra,
+    });
+
+    const first = p.ask(curl('curl -s https://a/'));
+    expect((shown as PermissionRequest | null)?.alwaysRule).toBe('shell:curl');
+    (shown as unknown as PermissionRequest).resolve('allow-always');
+    expect(await first).toBe('allow-always');
+    expect(saved).toEqual(['shell:curl']);
+
+    shown = null;
+    expect(await p.ask(curl('curl -s https://b/'))).toBe('allow-once');
+    expect(shown).toBeNull(); // no prompt
+
+    void p.ask(curl('curl -s https://c/', { noSessionCache: true }));
+    expect(shown).not.toBeNull(); // sensitive → still prompts
+  });
+});

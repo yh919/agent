@@ -46,6 +46,7 @@ import * as logger from '../logger/logger.js';
 import { createSessionDebugLog } from '../logger/sessionDebug.js';
 import * as memoryProviderFactory from '../memoryProvider/factory.js';
 import { YoloPrompter } from '../permission/permission.js';
+import { ProjectRules, rulesPath } from '../permission/rules.js';
 import * as sessionStore from '../session/store.js';
 import { skillSearchDirs } from '../skills/discovery.js';
 import { LoadSkillTool } from '../skills/loadSkill.js';
@@ -461,7 +462,8 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
   // in noticeHolder, so it surfaces in the TUI the moment it finishes even
   // mid-conversation on something unrelated.
   const backgroundTasks = new BackgroundTaskManager((text) => noticeHolder.publish?.(text));
-  const bridgedPerm = new BridgedPrompter((req) => permHolder.publish?.(req));
+  const projectRules = new ProjectRules(rulesPath(process.cwd()));
+  const bridgedPerm = new BridgedPrompter((req) => permHolder.publish?.(req), projectRules);
   const bridgedAsk = new BridgedAskPrompter((req) => askHolder.publish?.(req));
   const prompter = new YoloPrompter(bridgedPerm, flags.yolo);
   if (flags.yolo) {
@@ -1073,6 +1075,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     bindNoticePublisher: (publish) => noticeHolder.bind(publish),
     resumeSummary,
     listSessions: () => sessionStore.listDir(sessionDir),
+    permissionRules: projectRules,
     // /resume: remember the pick; after the TUI closes we relaunch into it.
     resumeSession: (id: string) => {
       relaunchResumeID = id;

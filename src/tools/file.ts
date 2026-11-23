@@ -3,10 +3,12 @@
 // frictionless. Writes and edits always require permission (handled by
 // the registry).
 
+import { readFileSync, statSync } from 'node:fs';
 import { mkdir, open, readFile, realpath, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type { Prompter } from '../permission/permission.js';
+import { lineDiff } from './diff.js';
 import { isSensitivePath } from './sensitive.js';
 import { type Tool, argBool, argString } from './types.js';
 
@@ -169,6 +171,18 @@ export class FileWriteTool implements Tool {
   summarize(args: Record<string, unknown>): { summary: string; detail: string } {
     const path = argString(args, 'path');
     const content = argString(args, 'content');
+    // Overwriting an existing file → show what changes, not just the new text.
+    let existing: string | null = null;
+    try {
+      const abs = resolve(path);
+      if (statSync(abs).size <= 200_000) existing = readFileSync(abs, 'utf8');
+    } catch {
+      /* new file */
+    }
+    const diff = existing === null ? null : lineDiff(existing, content);
+    if (diff) {
+      return { summary: `overwrite file: ${path}`, detail: `path: ${path}\n${diff.join('\n')}` };
+    }
     const preview = content.length > 400 ? `${content.slice(0, 400)}...` : content;
     return {
       summary: `write file: ${path}`,
@@ -222,7 +236,7 @@ export class FileEditTool implements Tool {
     const path = argString(args, 'path');
     return {
       summary: `edit file: ${path}`,
-      detail: `path: ${path}\n- ${argString(args, 'old_string')}\n+ ${argString(args, 'new_string')}`,
+      detail: `path: ${path}\n${(lineDiff(argString(args, 'old_string'), argString(args, 'new_string'), 1_000) ?? []).join('\n')}`,
     };
   }
 

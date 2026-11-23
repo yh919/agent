@@ -4,9 +4,12 @@
 // promise resolves when that happens.
 
 import type { Decision, Prompter, Request } from '../permission/permission.js';
+import { type ProjectRules, matches, ruleFor } from '../permission/rules.js';
 import { stripControlSequences } from './toolResultFormat.js';
 
 export interface PermissionRequest extends Request {
+  /** Rule "always" would save (e.g. `shell:curl`); absent → no always option. */
+  alwaysRule?: string;
   resolve: (d: Decision) => void;
   reject: (err: Error) => void;
 }
@@ -24,8 +27,19 @@ export class BridgedPrompter implements Prompter {
   private busy = false;
   private waiters: Array<() => void> = [];
 
-  constructor(publish: PermissionPublisher) {
+  constructor(
+    publish: PermissionPublisher,
+    /** Project "don't ask again" rules; omitted → no always option. */
+    private readonly rules?: ProjectRules,
+  ) {
     this.publish = publish;
+  }
+
+  /** Cached for the session, or allowed by a saved project rule. */
+  private preApproved(req: Request): boolean {
+    if (req.noSessionCache) return false; // sensitive: always ask
+    if (this.sessionAllowed.has(this.keyFor(req))) return true;
+    return !!this.rules && matches(this.rules.list(), req);
   }
 
   // Session-cache identity. Keying on the tool name alone would let one
@@ -44,7 +58,7 @@ export class BridgedPrompter implements Prompter {
     // session caching must always re-prompt, never be silently satisfied from
     // the cache (L13 — defuses a latent bypass even though key spaces don't
     // currently collide).
-    if (!req.noSessionCache && this.sessionAllowed.has(this.keyFor(req))) return 'allow-once';
+    if (this.preApproved(req)) return 'allow-once';
     // Acquire the single-modal lock. If idle we take it synchronously (so the
     // first publish stays on the caller's stack); otherwise we park until the
     // in-flight prompt hands the lock off to us.
@@ -59,7 +73,7 @@ export class BridgedPrompter implements Prompter {
       // here. The first "allow session" populates the cache while the rest wait,
       // so the queued ones ride that approval instead of each re-opening an
       // identical modal.
-      if (!req.noSessionCache && this.sessionAllowed.has(this.keyFor(req))) return 'allow-once';
+      if (this.preApproved(req)) return 'allow-once';
       return await this.askOnce(req, signal);
     } finally {
       const next = this.waiters.shift();
@@ -81,8 +95,11 @@ export class BridgedPrompter implements Prompter {
       };
       signal?.addEventListener('abort', onAbort, { once: true });
 
+      const alwaysRule =
+        this.rules && !req.noSessionCache ? (ruleFor(req) ?? undefined) : undefined;
       const wrapped: PermissionRequest = {
         ...req,
+        alwaysRule,
         summary: stripControlSequences(req.summary),
         detail: stripControlSequences(req.detail),
         resolve: (d: Decision) => {
@@ -91,6 +108,7 @@ export class BridgedPrompter implements Prompter {
           // one approval but re-prompt next time.
           if (d === 'allow-session' && !req.noSessionCache)
             this.sessionAllowed.add(this.keyFor(req));
+          if (d === 'allow-always' && alwaysRule) this.rules?.add(alwaysRule);
           this.publish(null);
           resolve(d);
         },

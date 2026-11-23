@@ -61,4 +61,6 @@ export interface AppProps {
   listSessions?: () => import('../session/store.js').Summary[];
   /** /resume: switch to this session (the CLI relaunches into it on exit). */
   resumeSession?: (id: string) => void;
+  /** /permissions: this project's "don't ask again" rules. */
+  permissionRules?: { list(): string[]; remove(rule: string): void };
 }

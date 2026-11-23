@@ -50,6 +50,7 @@ export const SLASH_ITEMS: SlashItem[] = [
     description: 'how hard Claude thinks (subscription CLIs)',
   },
   { name: '/usage', description: 'Claude plan limits (5-hour / weekly) and session tokens' },
+  { name: '/permissions', description: 'review / remove "always allow" rules for this project' },
   { name: '/context', description: 'what is using the context window' },
   { name: '/export', description: 'save this conversation as markdown in the project' },
   { name: '/burp', args: '[port]', description: 'start the local Burp/Lepus listener' },

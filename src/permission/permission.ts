@@ -8,7 +8,8 @@
 //               still prompts for shell, writes, http mutations, scanners
 //   yolo      — auto-allow everything (lab only); shell denylist still hard-blocks
 
-export type Decision = 'allow-once' | 'allow-session' | 'deny';
+/** allow-always = save a project rule (see permission/rules.ts). */
+export type Decision = 'allow-once' | 'allow-session' | 'allow-always' | 'deny';
 
 /** Operator-facing permission mode. */
 export type PermissionMode = 'ask' | 'auto-safe' | 'yolo';

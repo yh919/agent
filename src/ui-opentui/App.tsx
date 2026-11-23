@@ -133,6 +133,7 @@ export function App({
   historyFile = historyPath(),
   listSessions,
   resumeSession,
+  permissionRules,
 }: AppProps) {
   if (!onExit) throw new Error('OpenTUI App requires onExit from the CLI mount');
   const renderer = useRenderer();
@@ -570,6 +571,44 @@ export function App({
         dispatch({ type: 'append', entry: { kind: 'system', text } });
         return;
       }
+      if (cmd === '/permissions') {
+        const rules = permissionRules?.list() ?? [];
+        if (rules.length === 0) {
+          dispatch({
+            type: 'append',
+            entry: {
+              kind: 'system',
+              text: 'no saved permission rules — press [p] on a permission prompt to add one (stored in .lepus/agent/permissions.json)',
+            },
+          });
+          return;
+        }
+        const show = (r: string) =>
+          r.startsWith('shell:') ? `shell: ${r.slice(6)} …` : r.replace(' ', ': ');
+        dispatch({
+          type: 'set-ask',
+          req: {
+            question: {
+              header: 'Permissions',
+              question: 'Always allowed in this project',
+              subtitle: 'Enter removes the selected rule · Esc keeps all',
+              options: rules.map((r, i) => ({ label: `${i + 1}. ${show(r)}` })),
+            },
+            resolve: (picked) => {
+              dispatch({ type: 'set-ask', req: null });
+              const rule = rules[Number.parseInt(picked, 10) - 1];
+              if (!rule) return;
+              permissionRules?.remove(rule);
+              dispatch({
+                type: 'append',
+                entry: { kind: 'system', text: `removed rule: ${show(rule)}` },
+              });
+            },
+            reject: () => dispatch({ type: 'set-ask', req: null }),
+          },
+        });
+        return;
+      }
       if (cmd === '/context') {
         dispatch({
           type: 'append',
@@ -733,6 +772,7 @@ export function App({
       listSessions,
       resumeSession,
       state.transcript,
+      permissionRules,
     ],
   );
 

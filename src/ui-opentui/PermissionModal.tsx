@@ -80,6 +80,7 @@ export function PermissionModal({
     }
     if (e.name === 'y') req.resolve('allow-once');
     else if (e.name === 'a') req.resolve('allow-session');
+    else if (e.name === 'p' && req.alwaysRule) req.resolve('allow-always');
     else if (e.name === 'n') req.resolve('deny');
   });
 
@@ -175,7 +176,7 @@ export function PermissionModal({
               ) : shell ? (
                 <text fg={theme.muted}>{'  '}</text>
               ) : null}
-              <text fg={theme.text}>{line || ' '}</text>
+              <text fg={shell ? theme.text : diffColor(line, theme.text)}>{line || ' '}</text>
             </box>
           ))}
           {detailView.elided ? (
@@ -193,7 +194,7 @@ export function PermissionModal({
           {detailView.lines.map((line, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: frozen request snapshot
             <box key={i} style={{ flexDirection: 'row' }}>
-              <text fg={theme.muted}>{line || ' '}</text>
+              <text fg={diffColor(line)}>{line || ' '}</text>
             </box>
           ))}
           {detailView.elided ? (
@@ -218,6 +219,19 @@ export function PermissionModal({
           </span>
           <span fg={theme.text}> session</span>
           <span fg={theme.muted}>{'  '}</span>
+          {req.alwaysRule ? (
+            <>
+              <span fg={theme.success} attributes={TextAttributes.BOLD}>
+                [p]
+              </span>
+              <span fg={theme.text}>
+                {req.alwaysRule.startsWith('shell:')
+                  ? ` always ${req.alwaysRule.slice(6)} … here`
+                  : ' always here'}
+              </span>
+              <span fg={theme.muted}>{'  '}</span>
+            </>
+          ) : null}
           <span fg={theme.error} attributes={TextAttributes.BOLD}>
             [n]
           </span>
@@ -285,4 +299,11 @@ export function formatDetail(
     parts.push(lineElided > 0 ? `${charElided} chars cut` : `… truncated ${charElided} chars`);
   }
   return { lines: kept, elided: parts.join(' · ') || null };
+}
+
+/** File-edit diffs: additions green, removals red, everything else muted. */
+function diffColor(line: string, fallback: string = theme.muted): string {
+  if (line.startsWith('+ ')) return theme.success;
+  if (line.startsWith('- ')) return theme.error;
+  return fallback;
 }
