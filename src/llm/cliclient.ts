@@ -113,6 +113,9 @@ export class CliClient implements StreamingClient {
    * `sent` is the rendered transcript the session already holds.
    */
   private session?: { id: string; base: string; extra: string; sent: string[] };
+  /** Model Claude Code fell back to after a safeguard refusal; later calls go
+   *  straight there instead of paying for a refused attempt every turn. */
+  private fallbackModel = '';
 
   constructor(
     private readonly backend: CliBackend,
@@ -143,7 +146,8 @@ export class CliClient implements StreamingClient {
   }
 
   private argv(system: string, resumeID?: string): string[] {
-    const m = this.modelID && this.modelID !== 'default' ? ['--model', this.modelID] : [];
+    const id = this.fallbackModel || this.modelID;
+    const m = id && id !== 'default' ? ['--model', id] : [];
     switch (this.backend) {
       case 'claude-code':
         return [
@@ -267,8 +271,10 @@ export class CliClient implements StreamingClient {
           if (typeof ev.session_id === 'string') sessionID = ev.session_id;
           if (ev.type === 'system' && ev.subtype === 'thinking_tokens')
             onEvent?.({ type: 'thinking', tokens: Number(ev.estimated_tokens) || 0 });
-          else if (ev.type === 'system' && ev.subtype === 'model_refusal_fallback')
+          else if (ev.type === 'system' && ev.subtype === 'model_refusal_fallback') {
+            if (typeof ev.fallback_model === 'string') this.fallbackModel = ev.fallback_model;
             onEvent?.({ type: 'notice', text: refusalNotice(ev) });
+          }
           else if (ev.type === 'stream_event' && ev.event?.type === 'message_start') refusal = '';
           else if (ev.type === 'stream_event' && ev.event?.delta?.stop_reason === 'refusal')
             refusal = String(ev.event.delta.stop_details?.explanation ?? 'the request was refused');
@@ -466,5 +472,5 @@ function refusalNotice(ev: Record<string, unknown>): string {
   const from = String(ev.original_model ?? 'the model');
   const to = String(ev.fallback_model ?? 'another model');
   const link = String(ev.api_refusal_explanation ?? '').match(/https:\/\/\S+/)?.[0];
-  return `Claude's ${cat} safeguards flagged this request on ${from}; retried on ${to}.${link ? ` For authorized security work: ${link.replace(/[.)]+$/, '')}` : ''}`;
+  return `Claude's ${cat} safeguards flagged this request on ${from}; retried on ${to} and staying on it for this chat.${link ? ` For authorized security work: ${link.replace(/[.)]+$/, '')}` : ''}`;
 }

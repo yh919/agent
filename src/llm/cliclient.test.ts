@@ -161,6 +161,27 @@ describe('CliClient side events (claude-code)', () => {
     expect(seen[1]?.type === 'notice' && seen[1].text).toContain('https://support.claude.com/cvp');
   });
 
+  it('stays on the fallback model after a safeguard fallback', async () => {
+    const log = join(mkdtempSync(join(tmpdir(), 'fake-log-')), 'calls.jsonl');
+    process.env.FAKE_LOG = log;
+    process.env.FAKE_REPLY = 'ok';
+    const c = new CliClient('claude-code', 'opus');
+    const req = { model: 'opus', messages: [{ role: 'user' as const, content: 'q' }] };
+    process.env.FAKE_EVENTS = fallback;
+    await c.chat(req);
+    process.env.FAKE_EVENTS = '';
+    await c.chat(req);
+    process.env.FAKE_LOG = '';
+    const models = readFileSync(log, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => {
+        const a = (JSON.parse(l) as { argv: string[] }).argv;
+        return a[a.indexOf('--model') + 1];
+      });
+    expect(models).toEqual(['opus', 'claude-sonnet-5']);
+  });
+
   it('turns a refusal with no text into a clear error', async () => {
     process.env.FAKE_EVENTS = refused;
     process.env.FAKE_REPLY = '';
