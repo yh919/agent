@@ -220,6 +220,8 @@ const ConfigSchema = z.object({
   // value caps it. Unset → leave the API default (no thinkingConfig sent, so
   // models without the knob aren't affected).
   gemini_thinking_budget: z.number().int().nonnegative().optional(),
+  /** Reasoning effort for subscription CLIs (claude-code, codex); '' = CLI default. */
+  effort: z.enum(['', 'low', 'medium', 'high', 'xhigh', 'max']).default(''),
   // Tooling profile: which tools the agent reaches for by default.
   //   'minimal' — curl + Unix only (jq, grep, awk, sed, head, sort, uniq).
   //   'full'    — adds ffuf, nuclei, sqlmap, gobuster, subfinder, httpx,
@@ -306,6 +308,7 @@ export function configPath(): string {
 export const CONFIG_KEY_ORDER: readonly (keyof Config)[] = [
   'backend',
   'model',
+  'effort',
   'base_url',
   'api_key',
   'custom_models',

@@ -1096,6 +1096,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     applyProvider: async (change) => {
       cfg.backend = change.backend;
       cfg.model = change.model;
+      if (change.effort !== undefined) cfg.effort = change.effort;
       if (change.baseURL !== undefined) cfg.base_url = change.baseURL;
       // An explicit key entered through /provider is the user's own
       // durable configuration step — unlike --api-key, it's meant to

@@ -15,6 +15,8 @@ export interface ProviderChange {
   model: string;
   baseURL?: string;
   apiKey?: string;
+  /** Reasoning effort ('' = default); left unchanged when omitted. */
+  effort?: '' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }
 export type ApplyProvider = (change: ProviderChange) => Promise<void>;
 

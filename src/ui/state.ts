@@ -83,6 +83,8 @@ export interface AppState {
   /** Display name of the tool currently executing, shown in the busy status
    *  line while phase === 'running-tool'. Set on tool-call, cleared on done. */
   runningTool: string | null;
+  /** Estimated thinking tokens in the current model call (0 = not thinking). */
+  thinkingTokens: number;
   /** Display name of the last tool that finished. Unlike runningTool it
    *  persists into the idle status line so the user can see what just ran. */
   lastTool: string | null;
@@ -112,6 +114,7 @@ export function initialState(banner: string, bannerData: BannerData): AppState {
     phase: 'idle',
     transcriptFilter: 'all',
     runningTool: null,
+    thinkingTokens: 0,
     lastTool: null,
     findingsCount: 0,
     compactMode: false,
@@ -181,7 +184,12 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
     case 'set-busy':
-      return { ...state, busy: action.busy, phase: action.busy ? 'planning' : 'idle' };
+      return {
+        ...state,
+        busy: action.busy,
+        phase: action.busy ? 'planning' : 'idle',
+        thinkingTokens: 0,
+      };
     case 'set-api-ready':
       return { ...state, apiReady: action.ready };
     case 'set-active-skill':
@@ -1116,6 +1124,16 @@ function applyAgentEvent(state: AppState, ev: AgentEvent): AppState {
       }
       return { ...state, busy: false, phase: 'idle', runningTool: null };
     }
+    case 'thinking':
+      return { ...state, thinkingTokens: ev.tokens, phase: 'planning' };
+    case 'notice':
+      return {
+        ...state,
+        transcript: [
+          ...state.transcript,
+          { kind: 'system', text: `⚠ ${ev.text}`, color: 'yellow' },
+        ],
+      };
     default: {
       const _exhaustive: never = ev;
       void _exhaustive;

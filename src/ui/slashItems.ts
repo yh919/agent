@@ -44,6 +44,11 @@ export const SLASH_ITEMS: SlashItem[] = [
     description: 'export all confirmed findings to one report file (default markdown)',
   },
   { name: '/resume', description: 'switch to a previous session' },
+  {
+    name: '/effort',
+    args: '[low|medium|high|xhigh|max|default]',
+    description: 'how hard Claude thinks (subscription CLIs)',
+  },
   { name: '/usage', description: 'Claude plan limits (5-hour / weekly) and session tokens' },
   { name: '/context', description: 'what is using the context window' },
   { name: '/export', description: 'save this conversation as markdown in the project' },

@@ -36,8 +36,18 @@ export interface StreamingClient extends Client {
     onDelta: (delta: string) => void,
     signal?: AbortSignal,
     onRetry?: (info: RetryInfo) => void,
+    /** Side-channel progress some backends report (thinking, safety notices). */
+    onEvent?: (ev: ClientEvent) => void,
   ): Promise<ChatResponse>;
 }
+
+/**
+ * Out-of-band progress from a backend while a reply streams:
+ *  - thinking: cumulative estimated thinking tokens (content is redacted)
+ *  - notice:   something the user should know, e.g. a safety refusal that
+ *              the provider retried on another model
+ */
+export type ClientEvent = { type: 'thinking'; tokens: number } | { type: 'notice'; text: string };
 
 export interface Pinger {
   /**

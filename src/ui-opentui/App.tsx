@@ -522,6 +522,43 @@ export function App({
 
       // Info commands that only read state (Claude Code parity).
       const cmd = agentValue.trim();
+      // /effort [level] → reasoning effort for the subscription CLIs.
+      if (cmd === '/effort' || cmd.startsWith('/effort ')) {
+        const levels = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+        const apply = (level: '' | (typeof levels)[number]) => {
+          const cur = readConfig();
+          void applyProvider({ backend: cur.backend, model: cur.model, effort: level }).then(() =>
+            dispatch({
+              type: 'append',
+              entry: { kind: 'system', text: `effort set to ${level || 'default'}` },
+            }),
+          );
+        };
+        const arg = cmd.slice('/effort'.length).trim().toLowerCase();
+        if (arg === 'default' || arg === 'auto') return apply('');
+        if ((levels as readonly string[]).includes(arg))
+          return apply(arg as (typeof levels)[number]);
+        dispatch({
+          type: 'set-ask',
+          req: {
+            question: {
+              header: 'Effort',
+              question: 'How hard should Claude think?',
+              subtitle: 'Higher = deeper reasoning, slower, uses more of your plan',
+              options: [
+                { label: 'default', description: "the CLI's own choice" },
+                ...levels.map((l) => ({ label: l })),
+              ],
+            },
+            resolve: (picked) => {
+              dispatch({ type: 'set-ask', req: null });
+              apply(picked === 'default' ? '' : (picked as (typeof levels)[number]));
+            },
+            reject: () => dispatch({ type: 'set-ask', req: null }),
+          },
+        });
+        return;
+      }
       if (cmd === '/usage' || cmd === '/cost') {
         const plan = readPlanUsage();
         const text = [
@@ -831,7 +868,7 @@ export function App({
         runCtl.current?.abort();
         return;
       }
-      if (inputValue.length > 0) {
+      if (input.current().length > 0) {
         input.clear();
         return;
       }
@@ -1033,7 +1070,7 @@ export function App({
 
     // 5a. Esc clears the draft when idle (busy Esc already aborted above);
     //     Esc Esc on an empty prompt opens "edit an earlier message".
-    if (e.name === 'escape' && inputValue.length === 0) {
+    if (e.name === 'escape' && input.current().length === 0) {
       if (Date.now() - lastEscAt.current < 600) {
         lastEscAt.current = 0;
         openRewindPicker();
@@ -1071,7 +1108,7 @@ export function App({
     }
 
     if (e.name === 'return') {
-      const v = inputValue.trim();
+      const v = input.current().trim();
       if (v.length === 0) return;
       input.clear();
       setInputEpoch((n) => n + 1);
@@ -1166,7 +1203,7 @@ export function App({
     if (e.ctrl || e.meta) return;
 
     // 5e'. `?` on an empty prompt opens the shortcuts panel.
-    if (e.sequence === '?' && inputValue.length === 0) {
+    if (e.sequence === '?' && input.current().length === 0) {
       dispatch({
         type: 'set-ask',
         req: shortcutsPanel(() => dispatch({ type: 'set-ask', req: null })),
@@ -1353,7 +1390,8 @@ export function App({
               ctxTokens={statusInfo.ctxTokens}
               compactThreshold={statusInfo.compactThreshold}
               memoryItems={statusInfo.memoryItems}
-              model={state.bannerData.model}
+              model={withEffort(state.bannerData.model, agent.client)}
+              thinkingTokens={state.thinkingTokens}
               toolSupport={state.bannerData.toolSupport}
               phase={state.phase}
               transcriptFilter={state.transcriptFilter}
@@ -1431,4 +1469,10 @@ function transcriptEntryMatchesFilter(entry: TranscriptEntry, filter: Transcript
     case 'errors':
       return entry.kind === 'error' || entry.text.includes('[error]');
   }
+}
+
+/** "sonnet" → "sonnet · high" when the client runs with a set effort. */
+function withEffort(model: string, client: unknown): string {
+  const effort = (client as { getEffort?: () => string }).getEffort?.();
+  return effort ? `${model} · ${effort}` : model;
 }

@@ -37,6 +37,8 @@ export interface OpenTuiStatusProps extends StatusProps {
   modeChip?: string;
   /** Tokens spent by the running turn (↑ sent, ↓ received). */
   turnTokens?: { in: number; out: number };
+  /** Estimated thinking tokens in the current model call. */
+  thinkingTokens?: number;
 }
 
 const STAR_FRAMES = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
@@ -89,6 +91,7 @@ function BusyLine(props: OpenTuiStatusProps) {
   const parts = [
     props.elapsedSeconds ? formatElapsed(props.elapsedSeconds) : '',
     t && t.in + t.out > 0 ? `↑${shortTokens(t.in)} ↓${shortTokens(t.out)}` : '',
+    props.thinkingTokens ? `thought ~${shortTokens(props.thinkingTokens)}` : '',
     'esc to interrupt',
   ].filter(Boolean);
   const clock = ` (${parts.join(' · ')})`;

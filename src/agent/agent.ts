@@ -1529,6 +1529,7 @@ export class Agent {
         },
         signal,
         onRetry,
+        (ev) => emit(ev),
       );
       const tail = filter.flush();
       if (tail) emit({ type: 'assistant-delta', text: tail });

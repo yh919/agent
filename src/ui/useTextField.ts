@@ -13,7 +13,7 @@
 //   - No cursor movement, so editing a long URL meant deleting and
 //     re-typing the tail.
 
-import { useCallback, useReducer } from 'react';
+import { useCallback, useReducer, useRef } from 'react';
 import { cellWidth, graphemes } from './terminalWidth.js';
 
 export interface TextFieldState {
@@ -37,6 +37,8 @@ export interface TextFieldActions {
   kill: (span: KillSpan) => void;
   setValue: (v: string, cursor?: number) => void;
   clear: () => void;
+  /** Value including actions not yet rendered (see useTextField). */
+  current: () => string;
 }
 
 export type KillSpan = 'line-start' | 'word-back' | 'line-end';
@@ -138,27 +140,36 @@ export function wordBoundary(value: string, cursor: number, dir: -1 | 1): number
 }
 
 export function useTextField(initial = ''): TextField {
-  const [state, dispatch] = useReducer(reducer, {
+  const [state, dispatchState] = useReducer(reducer, {
     value: initial,
     cursor: initial.length,
   });
+  // Live copy updated synchronously on every action. Key handlers run many
+  // times before React re-renders when keys arrive in a burst (fast typing,
+  // unbracketed paste); `value` from render is stale there, `current()` isn't.
+  const live = useRef<TextFieldState>(state);
+  const dispatch = useCallback((a: Action) => {
+    live.current = reducer(live.current, a);
+    dispatchState(a);
+  }, []);
+  const current = useCallback(() => live.current.value, []);
 
-  const insertText = useCallback((text: string) => dispatch({ type: 'insert', text }), []);
-  const backspace = useCallback(() => dispatch({ type: 'backspace' }), []);
-  const deleteForward = useCallback(() => dispatch({ type: 'delete' }), []);
-  const moveLeft = useCallback(() => dispatch({ type: 'move', delta: -1 }), []);
-  const moveRight = useCallback(() => dispatch({ type: 'move', delta: 1 }), []);
-  const moveUp = useCallback(() => dispatch({ type: 'move-up' }), []);
-  const moveDown = useCallback(() => dispatch({ type: 'move-down' }), []);
-  const moveLineStart = useCallback(() => dispatch({ type: 'move-line-start' }), []);
-  const moveLineEnd = useCallback(() => dispatch({ type: 'move-line-end' }), []);
-  const moveWord = useCallback((dir: -1 | 1) => dispatch({ type: 'word', dir }), []);
-  const kill = useCallback((span: KillSpan) => dispatch({ type: 'kill', span }), []);
+  const insertText = useCallback((text: string) => dispatch({ type: 'insert', text }), [dispatch]);
+  const backspace = useCallback(() => dispatch({ type: 'backspace' }), [dispatch]);
+  const deleteForward = useCallback(() => dispatch({ type: 'delete' }), [dispatch]);
+  const moveLeft = useCallback(() => dispatch({ type: 'move', delta: -1 }), [dispatch]);
+  const moveRight = useCallback(() => dispatch({ type: 'move', delta: 1 }), [dispatch]);
+  const moveUp = useCallback(() => dispatch({ type: 'move-up' }), [dispatch]);
+  const moveDown = useCallback(() => dispatch({ type: 'move-down' }), [dispatch]);
+  const moveLineStart = useCallback(() => dispatch({ type: 'move-line-start' }), [dispatch]);
+  const moveLineEnd = useCallback(() => dispatch({ type: 'move-line-end' }), [dispatch]);
+  const moveWord = useCallback((dir: -1 | 1) => dispatch({ type: 'word', dir }), [dispatch]);
+  const kill = useCallback((span: KillSpan) => dispatch({ type: 'kill', span }), [dispatch]);
   const setValue = useCallback(
     (v: string, cursor?: number) => dispatch({ type: 'set', value: v, cursor: cursor ?? v.length }),
-    [],
+    [dispatch],
   );
-  const clear = useCallback(() => dispatch({ type: 'set', value: '', cursor: 0 }), []);
+  const clear = useCallback(() => dispatch({ type: 'set', value: '', cursor: 0 }), [dispatch]);
 
   return {
     value: state.value,
@@ -176,6 +187,7 @@ export function useTextField(initial = ''): TextField {
     kill,
     setValue,
     clear,
+    current,
   };
 }
 

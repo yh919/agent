@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CliClient, extractToolCalls } from './cliclient.js';
+import type { ClientEvent } from './client.js';
 import { type Message, TURN_CONTEXT_MARKER, type ToolSpec } from './types.js';
 
 const tool: ToolSpec = {
@@ -18,6 +19,7 @@ writeFileSync(
 const fs = require('node:fs');
 // Record argv + stdin so tests can check what was sent.
 if (process.env.FAKE_LOG) fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ argv: process.argv.slice(2), stdin: fs.readFileSync(0, 'utf8') }) + '\\n');
+for (const l of (process.env.FAKE_EVENTS || '').split('\\n').filter(Boolean)) console.log(l);
 const t = process.env.FAKE_REPLY, h = Math.ceil(t.length / 2);
 for (const p of [t.slice(0, h), t.slice(h)])
   console.log(JSON.stringify({ type: 'stream_event', session_id: 'sess-1', event: { delta: { type: 'text_delta', text: p } } }));
@@ -114,5 +116,60 @@ describe('CliClient session reuse (claude-code)', () => {
     expect(calls[1]?.stdin).not.toContain('turn-context'); // unchanged → not re-sent
     expect(calls[2]?.stdin).toContain('route B');
     expect(calls[3]?.stdin).toContain('edited first');
+  });
+});
+
+describe('CliClient side events (claude-code)', () => {
+  const ev = (o: object) => JSON.stringify(o);
+  const fallback = ev({
+    type: 'system',
+    subtype: 'model_refusal_fallback',
+    original_model: 'claude-sonnet-5-5',
+    fallback_model: 'claude-sonnet-5',
+    api_refusal_category: 'cyber',
+    api_refusal_explanation: 'Flagged. Apply: https://support.claude.com/cvp.',
+  });
+  const thinking = ev({ type: 'system', subtype: 'thinking_tokens', estimated_tokens: 1200 });
+  const refused = [
+    ev({ type: 'stream_event', event: { type: 'message_start' } }),
+    ev({
+      type: 'stream_event',
+      event: {
+        type: 'message_delta',
+        delta: {
+          stop_reason: 'refusal',
+          stop_details: { explanation: 'Cyber safeguards flagged this.' },
+        },
+      },
+    }),
+  ].join('\n');
+
+  it('reports thinking tokens and safeguard fallbacks as client events', async () => {
+    process.env.FAKE_EVENTS = [thinking, fallback].join('\n');
+    process.env.FAKE_REPLY = 'answer';
+    const seen: ClientEvent[] = [];
+    await new CliClient('claude-code', 'default').chatStream(
+      { model: 'default', messages: [{ role: 'user', content: 'q' }] },
+      () => {},
+      undefined,
+      undefined,
+      (e) => seen.push(e),
+    );
+    process.env.FAKE_EVENTS = '';
+    expect(seen[0]).toEqual({ type: 'thinking', tokens: 1200 });
+    expect(seen[1]?.type === 'notice' && seen[1].text).toContain('retried on claude-sonnet-5');
+    expect(seen[1]?.type === 'notice' && seen[1].text).toContain('https://support.claude.com/cvp');
+  });
+
+  it('turns a refusal with no text into a clear error', async () => {
+    process.env.FAKE_EVENTS = refused;
+    process.env.FAKE_REPLY = '';
+    await expect(
+      new CliClient('claude-code', 'default').chat({
+        model: 'default',
+        messages: [{ role: 'user', content: 'q' }],
+      }),
+    ).rejects.toThrow('Claude declined this request: Cyber safeguards flagged this.');
+    process.env.FAKE_EVENTS = '';
   });
 });

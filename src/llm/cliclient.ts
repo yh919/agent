@@ -11,9 +11,10 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
-import type { StreamingClient } from './client.js';
+import type { ClientEvent, StreamingClient } from './client.js';
 import { parseContentToolCalls } from './contentToolCalls.js';
 import { newCallID } from './ids.js';
+import type { RetryInfo } from './retry.js';
 import {
   type ChatRequest,
   type ChatResponse,
@@ -33,7 +34,16 @@ export const CLI_BACKENDS: Record<
     bin: 'claude',
     label: 'Claude account',
     login: 'claude auth login',
-    models: ['sonnet', 'opus', 'haiku', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
+    // Aliases track the latest of each tier; fable needs usage credits on most plans.
+    models: [
+      'sonnet',
+      'opus',
+      'haiku',
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
+      'claude-haiku-5-5',
+      'fable',
+    ],
   },
   codex: { bin: 'codex', label: 'ChatGPT account', login: 'codex login', models: [] },
   'gemini-cli': { bin: 'gemini', label: 'Google account', login: 'gemini', models: [] },
@@ -107,7 +117,14 @@ export class CliClient implements StreamingClient {
   constructor(
     private readonly backend: CliBackend,
     private readonly modelID: string,
+    /** low | medium | high | xhigh | max ('' = CLI default). */
+    private readonly effort = '',
   ) {}
+
+  /** For the status line / /model: current reasoning effort ('' = default). */
+  getEffort(): string {
+    return this.effort;
+  }
 
   name(): string {
     return this.backend;
@@ -117,8 +134,12 @@ export class CliClient implements StreamingClient {
     return this.modelID;
   }
 
-  chat(req: ChatRequest, signal?: AbortSignal): Promise<ChatResponse> {
-    return this.chatStream(req, () => {}, signal);
+  chat(
+    req: ChatRequest,
+    signal?: AbortSignal,
+    onRetry?: (info: RetryInfo) => void,
+  ): Promise<ChatResponse> {
+    return this.chatStream(req, () => {}, signal, onRetry);
   }
 
   private argv(system: string, resumeID?: string): string[] {
@@ -139,6 +160,7 @@ export class CliClient implements StreamingClient {
           '--system-prompt',
           system,
           ...(resumeID ? ['--resume', resumeID] : []),
+          ...(this.effort ? ['--effort', this.effort] : []),
           ...m,
         ];
       case 'codex':
@@ -151,6 +173,13 @@ export class CliClient implements StreamingClient {
           'read-only',
           '-C',
           this.cwd,
+          // Codex tops out at "high"; xhigh/max map onto it.
+          ...(this.effort
+            ? [
+                '-c',
+                `model_reasoning_effort=${['xhigh', 'max'].includes(this.effort) ? 'high' : this.effort}`,
+              ]
+            : []),
           ...m,
           '-',
         ];
@@ -163,6 +192,8 @@ export class CliClient implements StreamingClient {
     req: ChatRequest,
     onDelta: (delta: string) => void,
     signal?: AbortSignal,
+    _onRetry?: (info: RetryInfo) => void,
+    onEvent?: (ev: ClientEvent) => void,
   ): Promise<ChatResponse> {
     const tools = req.tools ?? [];
     const sys = req.messages
@@ -220,6 +251,7 @@ export class CliClient implements StreamingClient {
     let failure = '';
     let stderr = '';
     let sessionID = '';
+    let refusal = ''; // explanation when the last message ended in a safety refusal
     // Hold back output that looks like a tool-call JSON reply so raw JSON never flashes in the UI.
     const push = (s: string) => {
       text += s;
@@ -229,10 +261,17 @@ export class CliClient implements StreamingClient {
       shown = text.length;
     };
     // biome-ignore lint/suspicious/noExplicitAny: loosely-typed CLI JSON events, each field read defensively
-    const onEvent = (ev: Record<string, any>) => {
+    const onLine = (ev: Record<string, any>) => {
       switch (this.backend) {
         case 'claude-code':
           if (typeof ev.session_id === 'string') sessionID = ev.session_id;
+          if (ev.type === 'system' && ev.subtype === 'thinking_tokens')
+            onEvent?.({ type: 'thinking', tokens: Number(ev.estimated_tokens) || 0 });
+          else if (ev.type === 'system' && ev.subtype === 'model_refusal_fallback')
+            onEvent?.({ type: 'notice', text: refusalNotice(ev) });
+          else if (ev.type === 'stream_event' && ev.event?.type === 'message_start') refusal = '';
+          else if (ev.type === 'stream_event' && ev.event?.delta?.stop_reason === 'refusal')
+            refusal = String(ev.event.delta.stop_details?.explanation ?? 'the request was refused');
           if (ev.type === 'rate_limit_event') savePlanUsage(ev.rate_limit_info);
           else if (ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta')
             push(ev.event.delta.text);
@@ -290,7 +329,7 @@ export class CliClient implements StreamingClient {
           nl = buf.indexOf('\n');
           if (!line.startsWith('{')) continue;
           try {
-            onEvent(JSON.parse(line));
+            onLine(JSON.parse(line));
           } catch {
             /* non-JSON noise */
           }
@@ -310,7 +349,10 @@ export class CliClient implements StreamingClient {
     if ((failure || code !== 0) && resumeID) {
       // Resume failed (session expired / pruned): retry once from scratch.
       this.session = undefined;
-      return this.chatStream(req, onDelta, signal);
+      return this.chatStream(req, onDelta, signal, _onRetry, onEvent);
+    }
+    if (!failure && code === 0 && refusal && !text.trim()) {
+      throw new Error(`Claude declined this request: ${refusal}`);
     }
     if (failure || code !== 0) {
       const why = failure || stderr.trim().split('\n').slice(-3).join(' ') || `exit ${code}`;
@@ -416,4 +458,13 @@ export function formatPlanUsage(u: PlanUsage, now = Date.now()): string {
   return [`Claude plan usage (reported ${age < 1 ? 'just now' : `${age}m ago`})`, ...lines].join(
     '\n',
   );
+}
+
+/** User-facing line for a safety refusal the CLI retried on another model. */
+function refusalNotice(ev: Record<string, unknown>): string {
+  const cat = typeof ev.api_refusal_category === 'string' ? ev.api_refusal_category : 'safety';
+  const from = String(ev.original_model ?? 'the model');
+  const to = String(ev.fallback_model ?? 'another model');
+  const link = String(ev.api_refusal_explanation ?? '').match(/https:\/\/\S+/)?.[0];
+  return `Claude's ${cat} safeguards flagged this request on ${from}; retried on ${to}.${link ? ` For authorized security work: ${link.replace(/[.)]+$/, '')}` : ''}`;
 }

@@ -73,6 +73,17 @@ export interface RetryEvent {
   message: string;
 }
 
+/** Estimated thinking tokens so far in the current model call. */
+export interface ThinkingEvent {
+  type: 'thinking';
+  tokens: number;
+}
+/** Backend notice for the user (e.g. safeguards flagged a request). */
+export interface NoticeEvent {
+  type: 'notice';
+  text: string;
+}
+
 /** Progress from a forked child agent (delegate_task / skill fork). */
 export interface SubagentProgressEvent {
   type: 'subagent-progress';
@@ -97,6 +108,8 @@ export type AgentEvent =
   | MemoryRecallEvent
   | RetryEvent
   | SubagentProgressEvent
+  | ThinkingEvent
+  | NoticeEvent
   | DoneEvent;
 
 /** MaxStepsError is raised when the tool loop hits the per-turn budget.

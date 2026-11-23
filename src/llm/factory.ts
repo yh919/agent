@@ -54,7 +54,7 @@ export function newFromConfig(cfg: Config): Client {
   }
 
   // Signed-in agent CLIs: no key, the CLI holds the subscription login.
-  if (isCliBackend(cfg.backend)) return new CliClient(cfg.backend, cfg.model);
+  if (isCliBackend(cfg.backend)) return new CliClient(cfg.backend, cfg.model, cfg.effort);
 
   switch (cfg.backend) {
     case 'ollama':
