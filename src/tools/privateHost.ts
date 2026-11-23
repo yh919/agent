@@ -5,15 +5,19 @@
 // endpoint. The gate prompts with noSessionCache so each private/internal
 // request needs a fresh, non-cached approval (auto-approved under YOLO).
 //
-// H2 (AUDIT.md): The gate performs a DNS lookup to decide whether to prompt,
-// then passes the *hostname* (not a pinned IP) to undici/fetch. A short-TTL
-// rebinding domain can return a public IP for the gate decision and an
-// internal/metadata IP on the actual connect. This is an accepted design
-// decision (see triage table in AUDIT.md and PROJECT.md "without limits"
-// philosophy). Reaching internal services via rebinding is frequently a
-// legitimate testing goal. We do NOT pin IPs or hard-block. At most we
-// surface the reason in the permission prompt (already done) and tool output.
+// H2 (AUDIT.md) — FIXED: the gate used to resolve the host to decide whether
+// to prompt, then hand the *hostname* (not a pinned IP) to undici/fetch, which
+// re-resolved independently. A short-TTL rebinding domain could return a public
+// IP for the gate decision and an internal/metadata IP on the actual connect —
+// a silent TOCTOU SSRF with no prompt. We now resolve the host ONCE in the gate
+// and PIN those addresses on the connection (see `pinnedLookup` + the pinned
+// dispatcher built in http.ts / web.ts). This is capability-preserving: an
+// internal/metadata host is still fully reachable after the operator approves
+// the prompt — we connect to exactly the IP the gate vetted. What is removed is
+// only the *silent* swap to a different, never-prompted IP between check and
+// connect. YOLO still auto-approves the prompt like every other gate.
 
+import type { LookupAddress, LookupOptions } from 'node:dns';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { Prompter } from '../permission/permission.js';
@@ -33,26 +37,35 @@ export function parseHTTPURL(raw: string): URL {
   return parsed;
 }
 
+/** Outcome of the private-host gate: the (possibly empty) prompt reason plus
+ *  the resolved addresses to pin on connect so the connection cannot re-resolve
+ *  to a different, never-vetted IP. `addresses` is empty for a literal-IP host
+ *  (undici connects to it directly, no DNS, so there is nothing to pin) and for
+ *  hosts that failed to resolve (the caller's fetch surfaces the DNS error). */
+export interface PrivateGateResult {
+  reason: string;
+  addresses: LookupAddress[];
+}
+
 /**
  * Prompt before a request whose host is (or resolves to) a private/internal
- * address. Returns immediately for public hosts. noSessionCache means the
- * prompt fires on every such request and is never silently re-granted for the
- * session (auto-approved under YOLO, like every gate). `toolName` is the tool
- * surfacing the request (for the modal). Throws on deny.
+ * address. Returns immediately (no prompt) for public hosts. noSessionCache
+ * means the prompt fires on every such request and is never silently re-granted
+ * for the session (auto-approved under YOLO, like every gate). `toolName` is the
+ * tool surfacing the request (for the modal). Throws on deny.
  *
- * Returns the reason string (if any) so callers can surface a non-blocking
- * trace in tool output / transcript. This is the recommended "at most a notice"
- * mitigation for H2 (DNS rebinding) per AUDIT.md — we still allow the request
- * after explicit approval and never pin or block.
+ * Returns the prompt reason (if any) AND the resolved addresses the caller MUST
+ * pin on the connection (H2 fix). The reason also drives a non-blocking trace in
+ * tool output / transcript.
  */
 export async function gatePrivateRequest(
   p: Prompter,
   parsed: URL,
   signal: AbortSignal,
   toolName: string,
-): Promise<string> {
-  const reason = await privateHostReason(parsed.hostname);
-  if (!reason) return '';
+): Promise<PrivateGateResult> {
+  const { reason, addresses } = await resolvePrivateHost(parsed.hostname);
+  if (!reason) return { reason: '', addresses };
   const decision = await p.ask(
     {
       tool: toolName,
@@ -65,33 +78,92 @@ export async function gatePrivateRequest(
   if (decision === 'deny') {
     throw new Error(`request to private/internal URL denied: ${parsed.href}`);
   }
-  return reason;
+  return { reason, addresses };
 }
 
 /** Returns a human-readable reason if the host is private/internal, else ''.
- *  Resolves DNS names so a public name pointing at an internal IP is caught. */
+ *  Resolves DNS names so a public name pointing at an internal IP is caught.
+ *  Thin wrapper over `resolvePrivateHost` for callers that only need the reason. */
 export async function privateHostReason(hostname: string): Promise<string> {
+  return (await resolvePrivateHost(hostname)).reason;
+}
+
+/**
+ * Resolve `hostname` ONCE and classify it. Returns the private/internal reason
+ * (or '') and the resolved addresses to pin on connect. Resolving a single time
+ * here and pinning those exact addresses is the core of the H2 (DNS-rebinding)
+ * fix: the gate decision and the connection now agree on the same IP.
+ */
+export async function resolvePrivateHost(hostname: string): Promise<PrivateGateResult> {
   // Strip brackets and a trailing FQDN dot so `localhost.` / `127.0.0.1.` are
   // normalized like their dotless forms before any name/IP check.
   const host = hostname
     .replace(/^\[|\]$/g, '')
     .replace(/\.$/, '')
     .toLowerCase();
-  if (host === 'localhost' || host.endsWith('.localhost')) return 'localhost name';
+  // localhost always maps to a loopback address locally — not attacker-
+  // controlled DNS, so there is no rebinding risk and nothing to pin.
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    return { reason: 'localhost name', addresses: [] };
+  }
   const kind = isIP(host);
-  if (kind === 4) return privateIPv4Reason(host);
-  if (kind === 6) return privateIPv6Reason(host);
+  if (kind === 4) return { reason: privateIPv4Reason(host), addresses: [] };
+  if (kind === 6) return { reason: privateIPv6Reason(host), addresses: [] };
   try {
     const resolved = await lookup(host, { all: true, verbatim: true });
+    let reason = '';
     for (const addr of resolved) {
-      const reason =
+      const r =
         addr.family === 4 ? privateIPv4Reason(addr.address) : privateIPv6Reason(addr.address);
-      if (reason) return `DNS resolves to ${reason} (${addr.address})`;
+      if (r) {
+        reason = `DNS resolves to ${r} (${addr.address})`;
+        break;
+      }
     }
+    return { reason, addresses: resolved };
   } catch {
     // Let the caller's fetch surface DNS failures with its normal diagnostics.
+    return { reason: '', addresses: [] };
   }
-  return '';
+}
+
+/**
+ * Build a Node/undici-style `lookup` that always returns the pre-vetted
+ * addresses, ignoring the hostname undici asks it to resolve. A pinned
+ * dispatcher built with this cannot connect to any IP other than the ones the
+ * gate already classified — closing the resolve-then-connect TOCTOU (H2).
+ * Supports both `dns.lookup` callback shapes: `{ all: true }` → address array,
+ * otherwise → (address, family). Used only for a single request to a single
+ * host, so returning the fixed set regardless of the requested name is correct.
+ */
+export type PinnedLookup = (
+  hostname: string,
+  options: LookupOptions,
+  callback: (
+    err: NodeJS.ErrnoException | null,
+    address: string | LookupAddress[],
+    family?: number,
+  ) => void,
+) => void;
+
+export function pinnedLookup(addresses: LookupAddress[]): PinnedLookup {
+  return (_hostname, options, callback) => {
+    if (addresses.length === 0) {
+      const err = new Error(
+        'pinnedLookup: no vetted address to connect to',
+      ) as NodeJS.ErrnoException;
+      err.code = 'ENOTFOUND';
+      // On error, Node's lookup callback is invoked with the error alone.
+      (callback as unknown as (e: NodeJS.ErrnoException) => void)(err);
+      return;
+    }
+    if (options?.all === true) {
+      callback(null, addresses);
+      return;
+    }
+    const first = addresses[0] as LookupAddress;
+    callback(null, first.address, first.family);
+  };
 }
 
 function privateIPv4Reason(host: string): string {
