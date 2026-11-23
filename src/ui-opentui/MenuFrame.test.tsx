@@ -3,6 +3,7 @@ import { testRender } from '@opentui/react/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { SlashItem } from '../ui/slashItems.js';
 import { MentionMenu } from './MentionMenu.js';
+import { MenuFrame, MenuRow } from './MenuFrame.js';
 import { SlashMenu } from './SlashMenu.js';
 
 const items: SlashItem[] = [
@@ -25,14 +26,12 @@ async function renderFrame(node: Parameters<typeof testRender>[0]): Promise<stri
 }
 
 describe('SlashMenu', () => {
-  it('renders framed chrome with caret on the selected row', async () => {
+  it('renders inline commands with caret on the selected row', async () => {
     const frame = await renderFrame(<SlashMenu items={items} selected={1} />);
-    expect(frame).toContain('COMMANDS');
     expect(frame).toContain('/help');
     expect(frame).toContain('/provider');
     expect(frame).toContain('pick backend');
     expect(frame).toContain('›');
-    expect(frame).toMatch(/↑↓|Enter|Esc/);
   });
 
   it('aligns secondary descriptions on a shared column', async () => {
@@ -55,7 +54,7 @@ describe('SlashMenu', () => {
 });
 
 describe('MentionMenu', () => {
-  it('renders framed file picker with path subtitle', async () => {
+  it('renders inline file picker with dir/file glyphs', async () => {
     const frame = await renderFrame(
       <MentionMenu
         cwd="src/ui"
@@ -66,10 +65,24 @@ describe('MentionMenu', () => {
         ]}
       />,
     );
-    expect(frame).toContain('FILES');
-    expect(frame).toContain('@ src/ui');
     expect(frame).toContain('components/');
     expect(frame).toContain('Banner.tsx');
     expect(frame).toContain('›');
+  });
+});
+
+describe('MenuFrame', () => {
+  it('renders framed box with header, subtitle, and footer', async () => {
+    const frame = await renderFrame(
+      <MenuFrame header="Tooling" subtitle="Pick tools" footer="Enter confirm">
+        <MenuRow selected={true} primary="curl" secondary="Unix tool" />
+      </MenuFrame>,
+    );
+    expect(frame).toContain('TOOLING');
+    expect(frame).toContain('Pick tools');
+    expect(frame).toContain('curl');
+    expect(frame).toContain('Enter confirm');
+    expect(frame).toMatch(/╭|┌/);
+    expect(frame).toMatch(/╰|└/);
   });
 });

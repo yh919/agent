@@ -96,6 +96,23 @@ describe('Input', () => {
     const bLines = frame.split('\n').filter((l) => /B{3,}/.test(l));
     expect(bLines.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('renders divider line variant (Claude Code style)', async () => {
+    const frame = await renderFrame(<Input value="" cursor={0} variant="line" width={40} />);
+    expect(frame).toContain('─'.repeat(20));
+    expect(frame).toContain('❯');
+    expect(frame).toMatch(/Ask anything|commands/i);
+    // Line variant does not have rounded frame corners
+    expect(frame).not.toMatch(/╭|┌/);
+    expect(frame).not.toMatch(/╰|└/);
+  });
+
+  it('renders typed value in line variant with prompt and cursor', async () => {
+    const frame = await renderFrame(<Input value="/help" cursor={5} variant="line" width={40} />);
+    expect(frame).toContain('─'.repeat(20));
+    expect(frame).toContain('❯');
+    expect(frame).toContain('/help');
+  });
 });
 
 import { softWrapLine } from './Input.js';

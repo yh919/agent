@@ -8,6 +8,10 @@
 //
 // Width: prefer an explicit `width` from the parent so the prompt frame
 // matches the full chat column.
+//
+// Variants:
+//   'frame' (default) — rounded box border around prompt (classic Lepus style)
+//   'line'            — horizontal divider line above prompt (Claude Code style)
 
 import { TextAttributes } from '@opentui/core';
 import { useTerminalDimensions } from '@opentui/react';
@@ -25,6 +29,8 @@ export interface InputProps {
   hint?: string;
   /** Column width of the chat pane. */
   width?: number;
+  /** Visual style: 'frame' (rounded box) or 'line' (divider line above). Default 'frame'. */
+  variant?: 'frame' | 'line';
 }
 
 const CONTINUATION_INDENT = '  ';
@@ -74,11 +80,15 @@ export function padEndCells(s: string, n: number): string {
 export function Input(props: InputProps) {
   const { width: columns } = useTerminalDimensions();
   const width = Math.max(20, props.width ?? columns);
-  // border (2) + paddingX (2) = 4 cells of chrome around the content.
-  const innerWidth = Math.max(8, width - 4);
+  const variant = props.variant ?? 'frame';
+  const isLine = variant === 'line';
+  // 'frame': border (2) + paddingX (2) = 4 cells chrome.
+  // 'line': paddingX (2) = 2 cells chrome.
+  const innerWidth = isLine ? Math.max(8, width - 2) : Math.max(8, width - 4);
   const isEmpty = props.value.length === 0;
   const promptText = props.prompt ?? DEFAULT_PROMPT;
   const borderColor = props.disabled ? theme.border.idle : theme.border.brand;
+  const dividerColor = theme.border.idle;
   const hint = props.hint !== undefined ? props.hint : DEFAULT_HINT;
   const placeholderText = props.placeholder ?? DEFAULT_PLACEHOLDER;
   const showCursor = true;
@@ -87,6 +97,34 @@ export function Input(props: InputProps) {
   const hangPad = ' '.repeat(cellWidth(promptText));
 
   if (isEmpty) {
+    if (isLine) {
+      return (
+        <box style={{ flexDirection: 'column', width }}>
+          <box style={{ flexDirection: 'row', width }}>
+            <text fg={dividerColor}>{'─'.repeat(width)}</text>
+          </box>
+          <box style={{ flexDirection: 'row', paddingX: 1 }}>
+            <text fg={theme.brand}>{promptText}</text>
+            <text fg={theme.muted} attributes={TextAttributes.DIM}>
+              {sliceToCells(
+                placeholderText,
+                Math.max(1, innerWidth - cellWidth(promptText) - 1),
+                '…',
+              )}
+            </text>
+            {showCursor ? <text fg={theme.brand}>{theme.glyphs.cursor}</text> : null}
+          </box>
+          {hint ? (
+            <box style={{ flexDirection: 'row', paddingX: 1 }}>
+              <text fg={theme.muted} attributes={TextAttributes.DIM}>
+                {truncateTo(hint, Math.max(8, width - 4))}
+              </text>
+            </box>
+          ) : null}
+        </box>
+      );
+    }
+
     return (
       <box style={{ flexDirection: 'column', width }}>
         <PromptFrame width={width} borderColor={borderColor}>
@@ -117,8 +155,6 @@ export function Input(props: InputProps) {
   const { line: cursorLine, col: cursorCol } = positionOf(props.value, props.cursor);
 
   // Build physical display rows for every logical line.
-  // prefix on chunk 0 of line 0 = prompt; chunk 0 of later lines = hard-newline
-  // indent; subsequent soft-wrap chunks = hang pad (spaces under the prompt).
   type PhysRow = {
     key: string;
     prefix: string;
@@ -128,8 +164,6 @@ export function Input(props: InputProps) {
   const phys: PhysRow[] = [];
   lines.forEach((lineText, lineIdx) => {
     const firstPrefix = lineIdx === 0 ? promptText : CONTINUATION_INDENT;
-    // Content budget is always relative to the first-line prefix width so
-    // soft-wrapped rows of multi-line drafts stay the same content width.
     const maxCols = Math.max(1, innerWidth - cellWidth(promptText));
     const chunks = wrapLine(lineText, maxCols);
     const lineStartOffset = lineIdx === 0 ? 0 : lines.slice(0, lineIdx).join('\n').length + 1;
@@ -150,40 +184,60 @@ export function Input(props: InputProps) {
     });
   });
 
+  const contentRows = (
+    <box style={{ flexDirection: 'column' }}>
+      {phys.map((row) => {
+        if (row.cursorAt === null) {
+          return (
+            <box key={row.key} style={{ flexDirection: 'row' }}>
+              <text fg={theme.brand}>{row.prefix}</text>
+              <text fg={theme.text}>{row.text}</text>
+            </box>
+          );
+        }
+        const head = row.text.slice(0, row.cursorAt);
+        const underCursor = row.text.slice(row.cursorAt, row.cursorAt + 1);
+        const tail = row.text.slice(row.cursorAt + 1);
+        return (
+          <box key={row.key} style={{ flexDirection: 'row' }}>
+            <text fg={theme.brand}>{row.prefix}</text>
+            {head ? <text fg={theme.text}>{head}</text> : null}
+            {underCursor ? (
+              <text fg="black" bg={theme.brand}>
+                {underCursor}
+              </text>
+            ) : (
+              <text fg={theme.brand}>{theme.glyphs.cursor}</text>
+            )}
+            {tail ? <text fg={theme.text}>{tail}</text> : null}
+          </box>
+        );
+      })}
+    </box>
+  );
+
+  if (isLine) {
+    return (
+      <box style={{ flexDirection: 'column', width }}>
+        <box style={{ flexDirection: 'row', width }}>
+          <text fg={dividerColor}>{'─'.repeat(width)}</text>
+        </box>
+        <box style={{ flexDirection: 'column', paddingX: 1, width }}>{contentRows}</box>
+        {hint ? (
+          <box style={{ flexDirection: 'row', paddingX: 1 }}>
+            <text fg={theme.muted} attributes={TextAttributes.DIM}>
+              {truncateTo(hint, Math.max(8, width - 4))}
+            </text>
+          </box>
+        ) : null}
+      </box>
+    );
+  }
+
   return (
     <box style={{ flexDirection: 'column', width }}>
       <PromptFrame width={width} borderColor={borderColor}>
-        <box style={{ flexDirection: 'column' }}>
-          {phys.map((row) => {
-            if (row.cursorAt === null) {
-              return (
-                <box key={row.key} style={{ flexDirection: 'row' }}>
-                  <text fg={theme.brand}>{row.prefix}</text>
-                  <text fg={theme.text}>{row.text}</text>
-                </box>
-              );
-            }
-            const head = row.text.slice(0, row.cursorAt);
-            const underCursor = row.text.slice(row.cursorAt, row.cursorAt + 1);
-            const tail = row.text.slice(row.cursorAt + 1);
-            return (
-              <box key={row.key} style={{ flexDirection: 'row' }}>
-                <text fg={theme.brand}>{row.prefix}</text>
-                {/* Empty <text> still paints a cell; skip it so the cursor on an
-                    empty line sits where the first character will. */}
-                {head ? <text fg={theme.text}>{head}</text> : null}
-                {underCursor ? (
-                  <text fg="black" bg={theme.brand}>
-                    {underCursor}
-                  </text>
-                ) : (
-                  <text fg={theme.brand}>{theme.glyphs.cursor}</text>
-                )}
-                {tail ? <text fg={theme.text}>{tail}</text> : null}
-              </box>
-            );
-          })}
-        </box>
+        {contentRows}
       </PromptFrame>
       {hint ? (
         <box style={{ flexDirection: 'row', paddingX: 1 }}>

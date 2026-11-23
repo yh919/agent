@@ -67,6 +67,7 @@ import {
   searchHistory,
 } from '../ui/history.js';
 import { exportTranscript, formatContext, formatSessionUsage } from '../ui/infoCommands.js';
+import { MENU_VISIBLE_CAP } from '../ui/menuWindow.js';
 import { sessionPickerRequest } from '../ui/sessionPicker.js';
 import { shortcutsPanel } from '../ui/shortcuts.js';
 import { filterSlash } from '../ui/slashItems.js';
@@ -98,14 +99,8 @@ const CONTEXT_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 // measurement (same "explicit, don't chase auto-measure timing" reasoning
 // as ChatPane.tsx). Branch by what's actually mounted so the idle prompt
 // doesn't permanently burn ~18 rows of empty chat space:
-// Quiet layout: no idle keybinding hint row under the input.
-//   idle  — rounded input + status ≈ 5
-//   menu  — + slash/@ picker ≈ 6 more
-//   modal — permission/ask/skills/secret (detail height-capped)
-const FOOTER_IDLE = 5;
 /** Turns at least this long ring the bell / notify when they finish. */
 const LONG_TURN_NOTIFY_MS = 30_000;
-const FOOTER_WITH_MENU = 11;
 const FOOTER_MODAL = 22;
 const CHAT_MIN_HEIGHT = 3;
 
@@ -785,12 +780,40 @@ export function App({
   // Mini Lepus mark is 3 rows + margin; compact is one line.
   const bannerHeight = state.compactMode ? 2 : 4;
   const inputLines = Math.max(1, inputValue.split('\n').length);
-  const extraInputLines = Math.max(0, inputLines - 1);
+  const softWrapExtra = Math.max(
+    0,
+    Math.ceil(
+      Math.max(...inputValue.split('\n').map((l) => l.length), 0) / Math.max(20, chatWidth - 6),
+    ) - 1,
+  );
   const hasPerm = Boolean(state.pendingPerm);
   const hasModal = Boolean(
     secretInput || state.pendingPerm || state.pendingAsk || state.pendingSkills,
   );
   const hasMenu = !hasModal && (mentionMatches.length > 0 || slashMatches.length > 0);
+  const menuRows = hasMenu
+    ? slashMatches.length > 0
+      ? Math.min(slashMatches.length, MENU_VISIBLE_CAP)
+      : Math.min(mentionMatches.length, MENU_VISIBLE_CAP)
+    : 0;
+  const hintText = search
+    ? `search history: "${search.q}"${search.q && search.idx === null ? ' · no match' : ''} · Ctrl+R older · Enter use · Esc cancel`
+    : exitHint
+      ? 'Press Ctrl+C again to exit'
+      : state.busy
+        ? queueLen > 0
+          ? `${queueLen} queued · Esc to cancel`
+          : 'Esc to cancel'
+        : undefined;
+  const hintRows = hintText ? 1 : 0;
+  // Footer composition in line mode:
+  //   menuRows (0 to MENU_VISIBLE_CAP)
+  //   + 1 (divider line)
+  //   + inputLines + softWrapExtra (input prompt rows)
+  //   + hintRows (0 or 1)
+  //   + 1 (status bar)
+  const normalFooterHeight = menuRows + 1 + inputLines + softWrapExtra + hintRows + 1;
+
   const permLayout = hasPerm
     ? computePermissionBudget({
         terminalRows: rows,
@@ -806,9 +829,7 @@ export function App({
     ? (permLayout?.footerHeight ?? FOOTER_MODAL)
     : hasModal
       ? FOOTER_MODAL
-      : hasMenu
-        ? FOOTER_WITH_MENU
-        : FOOTER_IDLE + extraInputLines;
+      : normalFooterHeight;
   const footerReserved = Math.min(footerRaw, footerCeiling);
   // Scroll region BELOW the banner. ChatPane outer height is forced to
   // (this + bannerHeight) so Chat + footer always fill exactly `rows`.
@@ -1333,22 +1354,8 @@ export function App({
     out: Math.max(0, statusInfo.usage.outputTokens - turnStartUsage.current.outputTokens),
   };
 
-  // Multi-line drafts grow the input frame; FOOTER_IDLE already covers a
-  // 1-line frame + hint + status. Soft-wrapped long lines add physical
-  // rows beyond split('\n') — budget a little extra from total length.
-  const softWrapExtra = Math.max(
-    0,
-    Math.ceil(
-      Math.max(...inputValue.split('\n').map((l) => l.length), 0) / Math.max(20, chatWidth - 6),
-    ) - 1,
-  );
-
-  // When a permission card is open the input is hidden — do not let a
-  // multi-line draft steal rows from the chat strip (that pushed the
-  // card under the last terminal row on short windows).
-  const chatScrollHeight = hasPerm
-    ? chatPaneHeight
-    : Math.max(CHAT_MIN_HEIGHT, chatPaneHeight - softWrapExtra);
+  // ChatPane and footer always sum to `rows`.
+  const chatScrollHeight = chatPaneHeight;
   // Whatever rows the chat strip gives up belong to the footer.
   const footerHeight = Math.max(0, rows - bannerHeight - chatScrollHeight);
 
@@ -1406,7 +1413,7 @@ export function App({
           overflow: 'hidden',
           width: chatWidth,
           justifyContent: hasModal ? 'center' : 'flex-end',
-          alignItems: 'center',
+          alignItems: 'stretch',
         }}
       >
         {secretInput ? (
@@ -1427,7 +1434,7 @@ export function App({
             onClose={() => dispatch({ type: 'set-skills-picker', open: false })}
           />
         ) : (
-          <box style={{ flexDirection: 'column' }}>
+          <box style={{ flexDirection: 'column', width: chatWidth }}>
             {mentionMatches.length > 0 ? (
               <MentionMenu
                 cwd={mentionDirBase?.dir ?? ''}
@@ -1437,7 +1444,14 @@ export function App({
             ) : slashMatches.length > 0 ? (
               <SlashMenu items={slashMatches} selected={slashIdx} />
             ) : null}
-            {/* Status (Writing / Thinking / Ready) sits ABOVE the prompt box. */}
+            <Input
+              key={inputEpoch}
+              value={inputValue}
+              cursor={input.cursor}
+              width={chatWidth}
+              variant="line"
+              hint={hintText}
+            />
             <StatusBar
               busy={state.busy}
               apiReady={state.apiReady}
@@ -1467,23 +1481,6 @@ export function App({
                   : permMode === 'auto-safe'
                     ? '⏵⏵ auto-safe · shift+tab'
                     : undefined
-              }
-            />
-            <Input
-              key={inputEpoch}
-              value={inputValue}
-              cursor={input.cursor}
-              width={chatWidth}
-              hint={
-                search
-                  ? `search history: "${search.q}"${search.q && search.idx === null ? ' · no match' : ''} · Ctrl+R older · Enter use · Esc cancel`
-                  : exitHint
-                    ? 'Press Ctrl+C again to exit'
-                    : state.busy
-                      ? queueLen > 0
-                        ? `${queueLen} queued · Esc to cancel`
-                        : 'Esc to cancel'
-                      : undefined
               }
             />
           </box>

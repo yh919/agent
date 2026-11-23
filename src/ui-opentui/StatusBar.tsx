@@ -64,6 +64,7 @@ export function StatusBar(props: OpenTuiStatusProps) {
         flexDirection: 'row',
         width: props.maxWidth ?? '100%',
         justifyContent: 'space-between',
+        paddingX: 1,
       }}
     >
       {props.busy ? (

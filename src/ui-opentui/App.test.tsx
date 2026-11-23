@@ -193,14 +193,22 @@ describe('App (OpenTUI)', () => {
     const setup = await mountApp();
     await pressAndFlush(setup, () => setup.mockInput.typeText('@src/ui-opentui/App'));
     const frame = setup.captureCharFrame();
-    expect(frame).toContain('FILES');
+    expect(frame).toMatch(/App\.tsx|App\.test\.tsx/);
   });
 
   it('shows the / command menu while typing a slash command', async () => {
     const setup = await mountApp();
     await pressAndFlush(setup, () => setup.mockInput.typeText('/clear'));
     const frame = setup.captureCharFrame();
-    expect(frame).toContain('COMMANDS');
+    expect(frame).toContain('/clear');
+  });
+
+  it('keeps the input prompt visible when typing a bare slash', async () => {
+    const setup = await mountApp();
+    await pressAndFlush(setup, () => setup.mockInput.typeText('/'));
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain('/help');
+    expect(frame).toMatch(/❯ \/|❯ \/▌/);
   });
 
   it('opens the provider picker when selecting /provider from the slash menu', async () => {

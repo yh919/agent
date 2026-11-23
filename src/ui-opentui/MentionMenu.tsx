@@ -1,11 +1,13 @@
 /** @jsxImportSource @opentui/react */
-// OpenTUI port of ../ui/MentionMenu.tsx. Pure composition of MenuFrame/MenuRow
-// (already ported) + shared logic — no Box/Text usage of its own.
+// OpenTUI MentionMenu — inline @file picker (Claude Code style).
+// Displays directly above the input prompt without heavy box chrome.
 
+import { TextAttributes } from '@opentui/core';
+import { useTerminalDimensions } from '@opentui/react';
 import type { MentionCandidate } from '../agent/mentions.js';
 import { computeMenuWindow } from '../ui/menuWindow.js';
+import { sliceToCells } from '../ui/terminalWidth.js';
 import { theme } from '../ui/theme.js';
-import { MenuFrame, MenuRow } from './MenuFrame.js';
 
 export interface MentionMenuProps {
   cwd: string;
@@ -13,26 +15,36 @@ export interface MentionMenuProps {
   selected: number;
 }
 
-export function MentionMenu({ cwd, candidates, selected }: MentionMenuProps) {
+export function MentionMenu({ candidates, selected }: MentionMenuProps) {
   if (candidates.length === 0) return null;
+  const { width: columns } = useTerminalDimensions();
   const w = computeMenuWindow(candidates.length, selected);
   const visible = candidates.slice(w.start, w.end);
-  const pathLabel = cwd ? `@ ${cwd}` : '@ files';
 
   return (
-    <MenuFrame
-      header="Files"
-      subtitle={pathLabel}
-      hiddenAbove={w.hiddenAbove}
-      hiddenBelow={w.hiddenBelow}
-      footer="↑↓ navigate · Enter insert · Esc dismiss"
-    >
+    <box style={{ flexDirection: 'column', width: '100%' }}>
       {visible.map((c, idx) => {
         const absoluteIdx = w.start + idx;
         const isSelected = absoluteIdx === selected;
-        const icon = c.isDir ? theme.glyphs.dir : theme.glyphs.file;
-        return <MenuRow key={c.insert} selected={isSelected} primary={c.display} icon={icon} />;
+        const caret = isSelected ? `${theme.glyphs.caret} ` : '  ';
+        const icon = c.isDir ? `${theme.glyphs.dir} ` : `${theme.glyphs.file} `;
+        const maxBudget = Math.max(10, columns - 6);
+        const label = sliceToCells(c.display, maxBudget, '…');
+
+        return (
+          <box key={c.insert} style={{ flexDirection: 'row', width: '100%', paddingX: 1 }}>
+            <text
+              fg={isSelected ? theme.focus : theme.text}
+              attributes={isSelected ? TextAttributes.BOLD : undefined}
+              truncate
+            >
+              {caret}
+              {icon}
+              {label}
+            </text>
+          </box>
+        );
       })}
-    </MenuFrame>
+    </box>
   );
 }
