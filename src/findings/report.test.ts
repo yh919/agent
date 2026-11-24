@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderMarkdownReport, renderSarifReport } from './report.js';
+import { renderHtmlReport, renderMarkdownReport, renderSarifReport } from './report.js';
 import type { Finding } from './store.js';
 
 function finding(overrides: Partial<Finding> = {}): Finding {
@@ -57,5 +57,47 @@ describe('renderSarifReport', () => {
     );
     expect(parsed.runs[0].tool.driver.rules).toHaveLength(1);
     expect(parsed.runs[0].results).toHaveLength(2);
+  });
+});
+
+describe('renderHtmlReport', () => {
+  it('produces a self-contained HTML document with an executive summary', () => {
+    const out = renderHtmlReport([finding()]);
+    expect(out.startsWith('<!doctype html>')).toBe(true);
+    expect(out).toContain('<style>'); // CSS is inlined, no external assets
+    expect(out).not.toMatch(/<link[^>]+href=|<script[^>]+src=/); // nothing fetched
+    expect(out).toContain('Executive summary');
+    expect(out).toContain('Security Findings Report');
+    expect(out).toContain('Reflected XSS in search');
+  });
+
+  it('renders an empty report without throwing', () => {
+    const out = renderHtmlReport([]);
+    expect(out).toContain('No findings recorded yet.');
+    expect(out).toContain('0 findings');
+  });
+
+  it('escapes HTML in finding fields to prevent markup injection in the report', () => {
+    const out = renderHtmlReport([
+      finding({ title: '<img src=x onerror=alert(1)>', impact: 'a & b < c' }),
+    ]);
+    expect(out).not.toContain('<img src=x onerror=alert(1)>');
+    expect(out).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(out).toContain('a &amp; b &lt; c');
+  });
+
+  it('includes a reproduce block and remediation when present', () => {
+    const out = renderHtmlReport([
+      finding({ curl: 'curl https://example.com -H "X: 1"', remediation: 'Encode output.' }),
+    ]);
+    expect(out).toContain('Reproduce');
+    expect(out).toContain('curl https://example.com');
+    expect(out).toContain('Remediation');
+    expect(out).toContain('Encode output.');
+  });
+
+  it('shows a target line when provided', () => {
+    const out = renderHtmlReport([finding()], { target: 'https://app.example.com' });
+    expect(out).toContain('Target: https://app.example.com');
   });
 });

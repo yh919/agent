@@ -45,7 +45,7 @@ export interface SlashContext {
     | ((port?: number) => Promise<{ url: string; token: string; alreadyRunning: boolean }>)
     | undefined;
   generateFindingsReport:
-    | ((format: 'markdown' | 'sarif') => Promise<{ path: string; count: number }>)
+    | ((format: 'markdown' | 'sarif' | 'html') => Promise<{ path: string; count: number }>)
     | undefined;
   /** Snapshot of background shell jobs for /jobs. */
   listJobs?: () => string;

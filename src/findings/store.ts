@@ -7,7 +7,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { atomicWriteFile } from '../persist/atomicFile.js';
-import { renderMarkdownReport, renderSarifReport } from './report.js';
+import { renderHtmlReport, renderMarkdownReport, renderSarifReport } from './report.js';
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -32,7 +32,7 @@ export interface SaveResult {
   duplicate: boolean;
 }
 
-export type ReportFormat = 'markdown' | 'sarif';
+export type ReportFormat = 'markdown' | 'sarif' | 'html';
 
 interface IndexEntry {
   path: string;
@@ -122,9 +122,19 @@ export class Store {
   /** Renders every recorded finding into one report file and returns its path + finding count. */
   async writeReport(format: ReportFormat = 'markdown'): Promise<{ path: string; count: number }> {
     const findings = await this.list();
-    const content =
-      format === 'sarif' ? renderSarifReport(findings) : renderMarkdownReport(findings);
-    const path = join(this.dir, format === 'sarif' ? 'report.sarif.json' : 'report.md');
+    let content: string;
+    let filename: string;
+    if (format === 'sarif') {
+      content = renderSarifReport(findings);
+      filename = 'report.sarif.json';
+    } else if (format === 'html') {
+      content = renderHtmlReport(findings);
+      filename = 'report.html';
+    } else {
+      content = renderMarkdownReport(findings);
+      filename = 'report.md';
+    }
+    const path = join(this.dir, filename);
     await atomicWriteFile(path, content, { mode: 0o600 });
     return { path, count: findings.length };
   }
