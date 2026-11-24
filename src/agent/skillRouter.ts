@@ -48,6 +48,27 @@ const SKILL_KEYWORDS: Record<string, string[]> = {
   takeover: ['subdomain takeover', 'dangling cname', 'takeover'],
   supabase: ['supabase', 'postgrest', 'row level security', 'rls'],
   deserialize: ['deserialize', 'deserialization', 'pickle', 'unserialize', 'binaryformatter'],
+  upload2shell: [
+    'upload2shell',
+    'file upload',
+    'arbitrary file upload',
+    'upload shell',
+    'webshell',
+    'web shell',
+    'ghostscript',
+    'cve-2026-125396',
+    'imagemagick',
+    'multipart',
+    'media upload',
+  ],
+  owasp: [
+    'owasp',
+    'owasp top 10',
+    'top 10',
+    'security audit',
+    'vulnerability audit',
+    'owasp assessment',
+  ],
 };
 
 const HIGH_RISK = [

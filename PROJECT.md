@@ -408,7 +408,7 @@ but are hidden from the system prompt and refused by `load_skill`. `LoadSkillToo
 materializes a skill's body. Live reload re-walks dirs on file change.
 
 **Built-in skills:** `recon`, `webvuln`, `ssrf`, `ssti`, `jwt`, `graphql`, `race`, `takeover`,
-`supabase`, `deserialize` (+ `_template` scaffold and a `README.md`). Each packages methodology,
+`supabase`, `deserialize`, `upload2shell`, `owasp` (+ `_template` scaffold and a `README.md`). Each packages methodology,
 payloads, constraints, and curl-first discipline ("real PoC + concrete impact, no theoretical
 bugs"). Supporting files: `discovery.ts`, `loadSkill.ts`, `registry.ts`, `template.ts`
 (scaffolding for `/skills new`), `validate.ts` (frontmatter validation + conformance tests).

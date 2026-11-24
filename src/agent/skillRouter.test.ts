@@ -16,6 +16,8 @@ const skills = [
   skill('graphql', 'GraphQL pentest playbook for introspection'),
   skill('webvuln', 'Web vulnerability pentest playbook'),
   skill('recon', 'External recon for subdomain enumeration'),
+  skill('upload2shell', 'File upload testing playbook'),
+  skill('owasp', 'OWASP Top 10 systematic security audit playbook'),
 ];
 
 describe('routeSkill', () => {
@@ -38,6 +40,18 @@ describe('routeSkill', () => {
   it('routes recon for subdomain work', () => {
     const r = routeSkill('enumerate subdomains for example.com', skills, new Target());
     expect(r?.skill).toBe('recon');
+  });
+
+  it('routes upload2shell for file upload work', () => {
+    const r = routeSkill('test the avatar file upload for arbitrary upload bypasses', skills, new Target());
+    expect(r?.skill).toBe('upload2shell');
+    expect(r?.summary).toBe('plan · upload2shell');
+  });
+
+  it('routes owasp for OWASP Top 10 audits', () => {
+    const r = routeSkill('perform an OWASP Top 10 audit on the application', skills, new Target());
+    expect(r?.skill).toBe('owasp');
+    expect(r?.summary).toBe('plan · owasp');
   });
 
   it('stays quiet for greetings', () => {

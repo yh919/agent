@@ -43,6 +43,36 @@ export interface OpenTuiStatusProps extends StatusProps {
 
 const STAR_FRAMES = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
 
+/** Rotating "Thinking" verbs: a new one every few seconds so long turns look alive. */
+export const THINKING_VERBS = [
+  'Thinking',
+  'Recon-ing',
+  'Enumerating',
+  'Fingerprinting',
+  'Mapping the surface',
+  'Probing',
+  'Fuzzing ideas',
+  'Tracing the flow',
+  'Pivoting',
+  'Reading the tea leaves',
+  'Connecting dots',
+  'Hunting',
+];
+
+export function thinkingVerb(elapsedSeconds = 0): string {
+  return THINKING_VERBS[Math.floor(elapsedSeconds / 4) % THINKING_VERBS.length] ?? 'Thinking';
+}
+
+/** Moving bright window over `text` (Claude Code-style shimmer). */
+function useShimmer(len: number, width = 4, intervalMs = 90): [number, number] {
+  const [pos, setPos] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setPos((p) => (p + 1) % (len + width * 3)), intervalMs);
+    return () => clearInterval(id);
+  }, [len, width, intervalMs]);
+  return [pos - width, pos];
+}
+
 /** 950 → "950", 3140 → "3.1k", 12000 → "12k". */
 export function shortTokens(n: number): string {
   if (n < 1000) return String(n);
@@ -86,7 +116,11 @@ function BusyLine(props: OpenTuiStatusProps) {
   const phaseText = phaseLabel(props.phase);
   // Tool name when running a tool; otherwise phase (Writing / Thinking / …).
   const primary =
-    props.phase === 'running-tool' && props.runningTool ? props.runningTool : `${phaseText}…`;
+    props.phase === 'running-tool' && props.runningTool
+      ? props.runningTool
+      : props.phase === 'planning'
+        ? `${thinkingVerb(props.elapsedSeconds)}…`
+        : `${phaseText}…`;
   // Claude Code style: "✻ Writing… (0:12 · ↑3.1k ↓420 · esc to interrupt)".
   const t = props.turnTokens;
   const parts = [
@@ -100,14 +134,29 @@ function BusyLine(props: OpenTuiStatusProps) {
     12,
     (props.maxWidth ?? 200) - (chipOf(props) ? chipOf(props).length + 2 : 0),
   );
-  let body = ` ${primary}${clock}`;
-  if (body.length > budget - 1) body = `${body.slice(0, Math.max(0, budget - 2))}…`;
+  let head = ` ${primary}`;
+  let tail = clock;
+  if (head.length + tail.length > budget - 1) {
+    tail = '';
+    if (head.length > budget - 1) head = `${head.slice(0, Math.max(0, budget - 2))}…`;
+  }
+  // Shimmer sweeps the label only; the stats stay calm and readable.
+  const [a, b] = useShimmer(head.length);
+  const lo = Math.max(0, Math.min(head.length, a));
+  const hi = Math.max(0, Math.min(head.length, b));
   return (
     <box style={{ flexDirection: 'row' }}>
       <text fg={theme.brand}>{spin}</text>
       <text fg={theme.text} attributes={TextAttributes.BOLD}>
-        {body}
+        {head.slice(0, lo)}
       </text>
+      <text fg={theme.brand} attributes={TextAttributes.BOLD}>
+        {head.slice(lo, hi)}
+      </text>
+      <text fg={theme.text} attributes={TextAttributes.BOLD}>
+        {head.slice(hi)}
+      </text>
+      <text fg={theme.muted}>{tail}</text>
     </box>
   );
 }
