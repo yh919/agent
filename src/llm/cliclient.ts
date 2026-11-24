@@ -274,8 +274,7 @@ export class CliClient implements StreamingClient {
           else if (ev.type === 'system' && ev.subtype === 'model_refusal_fallback') {
             if (typeof ev.fallback_model === 'string') this.fallbackModel = ev.fallback_model;
             onEvent?.({ type: 'notice', text: refusalNotice(ev) });
-          }
-          else if (ev.type === 'stream_event' && ev.event?.type === 'message_start') refusal = '';
+          } else if (ev.type === 'stream_event' && ev.event?.type === 'message_start') refusal = '';
           else if (ev.type === 'stream_event' && ev.event?.delta?.stop_reason === 'refusal')
             refusal = String(ev.event.delta.stop_details?.explanation ?? 'the request was refused');
           if (ev.type === 'rate_limit_event') savePlanUsage(ev.rate_limit_info);
