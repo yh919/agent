@@ -40,8 +40,9 @@ export const SLASH_ITEMS: SlashItem[] = [
   },
   {
     name: '/report',
-    args: '[markdown|sarif]',
-    description: 'export all confirmed findings to one report file (default markdown)',
+    args: '[markdown|sarif|html]',
+    description:
+      'export all confirmed findings to one report file (html = client-ready, print to PDF)',
   },
   { name: '/resume', description: 'switch to a previous session' },
   {

@@ -71,8 +71,11 @@ export function handleReport(ctx: SlashContext): void {
     return;
   }
   const fmtArg = (rest[0] ?? 'markdown').toLowerCase();
-  if (fmtArg !== 'markdown' && fmtArg !== 'sarif') {
-    dispatch({ type: 'append', entry: { kind: 'error', text: 'usage: /report [markdown|sarif]' } });
+  if (fmtArg !== 'markdown' && fmtArg !== 'sarif' && fmtArg !== 'html') {
+    dispatch({
+      type: 'append',
+      entry: { kind: 'error', text: 'usage: /report [markdown|sarif|html]' },
+    });
     return;
   }
   void generateFindingsReport(fmtArg)

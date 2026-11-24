@@ -69,7 +69,7 @@ export function handleSlash(
     | ((port?: number) => Promise<{ url: string; token: string; alreadyRunning: boolean }>)
     | undefined,
   generateFindingsReport:
-    | ((format: 'markdown' | 'sarif') => Promise<{ path: string; count: number }>)
+    | ((format: 'markdown' | 'sarif' | 'html') => Promise<{ path: string; count: number }>)
     | undefined,
   applyPermissionMode?: (mode: 'ask' | 'auto-safe' | 'yolo') => void,
   listJobs?: () => string,

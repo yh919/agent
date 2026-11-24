@@ -49,7 +49,7 @@ export interface AppProps {
     port?: number,
   ) => Promise<{ url: string; token: string; alreadyRunning: boolean }>;
   generateFindingsReport?: (
-    format: 'markdown' | 'sarif',
+    format: 'markdown' | 'sarif' | 'html',
   ) => Promise<{ path: string; count: number }>;
   listJobs?: () => string;
   resumeSummary?: string;

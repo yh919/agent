@@ -414,7 +414,7 @@ binary exposes the same capture data as an MCP server for compatible clients.
 | `/memory` | Saved facts, session memory, provider status. |
 | `/jobs` | List background shell jobs. |
 | `/snapshot` | Write a redacted context snapshot now. |
-| `/report [markdown\|sarif]` | Export all confirmed findings. |
+| `/report [markdown\|sarif\|html]` | Export all confirmed findings (html = client-ready, print to PDF). |
 | `/burp [port]` | Start the local Burp/Lepus bridge. |
 | `/skills [enable\|disable\|new <name>]` | Manage or scaffold skills. |
 | `/maxsteps <n>` | Tool budget before quiet auto-continue (default 20). |
@@ -506,6 +506,21 @@ Reports include:
 - Impact and remediation.
 - Copy-pasteable curl reproduction command.
 - Raw request material for Burp issue import when available.
+
+Export everything recorded so far into a single consolidated report with
+`/report`:
+
+```text
+/report              # Markdown (default) → ./findings/report.md
+/report sarif        # SARIF 2.1.0 for CI / security dashboards → report.sarif.json
+/report html         # client-ready, self-contained HTML → report.html
+```
+
+The HTML report is a single self-contained file (no external assets): an
+executive summary with a severity breakdown, a linked table of contents, and
+per-finding detail with evidence, reproduction, and remediation. Open it in a
+browser and **Print → Save as PDF** for a client deliverable. All finding
+fields are HTML-escaped, so untrusted response excerpts can't inject markup.
 
 ## Security Model
 

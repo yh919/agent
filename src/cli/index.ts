@@ -781,7 +781,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
     const handle = ingestHandle as IngestServerHandle | null;
     if (handle) await handle.close();
   };
-  const generateFindingsReport = (format: 'markdown' | 'sarif') =>
+  const generateFindingsReport = (format: 'markdown' | 'sarif' | 'html') =>
     findingsStore.writeReport(format);
   if (flags.burp) {
     try {
