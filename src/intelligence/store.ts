@@ -82,6 +82,201 @@ const BUILTIN_SCENARIOS: IntelligenceScenario[] = [
     confidence: 0.95,
     scope: 'builtin',
   },
+  {
+    id: 'builtin-upload-bypass-rce',
+    title: 'File upload bypasses for remote code execution (Upload2Shell)',
+    category: 'recon-gap',
+    triggers: [
+      'upload',
+      'file_upload',
+      'multipart',
+      'avatar',
+      'attachment',
+      'webshell',
+      '.phtml',
+      '.phar',
+    ],
+    technologies: ['PHP', 'Java', 'ASP.NET', 'Node.js', 'Nginx', 'Apache'],
+    lesson:
+      'When upload functionality exists, test extension filter evasion (phtml, php5, phar, pHp, double extensions like shell.php.png, null byte, trailing dots/spaces), content-type spoofing (image/jpeg, image/png), SVG with stored XSS/XXE, directory traversal in filenames (../../shell.php), and configuration overwrites (.htaccess, .user.ini).',
+    recommendedChecks: [
+      '.phtml',
+      '.php5',
+      '.phar',
+      '.pHp',
+      'shell.php.png',
+      'Content-Type: image/jpeg',
+      'Content-Type: image/png',
+      '.htaccess',
+      '.user.ini',
+      '../../filename',
+      'SVG XXE/XSS',
+    ],
+    avoidMissing: [
+      'alternate executable extensions',
+      'MIME type tampering',
+      'configuration file overrides (.htaccess/.user.ini)',
+    ],
+    source: 'builtin OWASP upload2shell guidance',
+    createdAt: '2026-06-03T00:00:00.000Z',
+    confidence: 0.94,
+    scope: 'builtin',
+  },
+  {
+    id: 'builtin-owasp-broken-access-control',
+    title: 'Broken Access Control and IDOR authorization testing',
+    category: 'vulnerability-pattern',
+    triggers: [
+      'idor',
+      'bola',
+      'tenant_id',
+      'bypassing authorization',
+      'privilege escalation',
+    ],
+    technologies: ['REST API', 'Spring Boot'],
+    lesson:
+      'Test object-level authorization by substituting numeric/UUID IDs belonging to other users/tenants. Test method/verb tampering (GET vs POST vs PUT vs DELETE) and header injection (X-Original-URL, X-Rewrite-URL, X-Forwarded-For).',
+    recommendedChecks: [
+      'swap user/tenant ID',
+      'strip Authorization header',
+      'switch HTTP verb',
+      'X-Original-URL header',
+      'access /admin routes with low-priv token',
+    ],
+    avoidMissing: [
+      'testing with a second user context',
+      'UUID predictability',
+      'PUT/DELETE on read-only endpoints',
+    ],
+    source: 'builtin OWASP A01 guidance',
+    createdAt: '2026-06-03T00:00:00.000Z',
+    confidence: 0.92,
+    scope: 'builtin',
+  },
+  {
+    id: 'builtin-owasp-injection-sqli-cmdi-ssti',
+    title: 'Injection surface testing (SQLi, Command Injection, SSTI)',
+    category: 'vulnerability-pattern',
+    triggers: [
+      'sql injection',
+      'sqli',
+      'cmdi',
+      'command injection',
+      'ssti',
+      'jinja2',
+      'sleep(5)',
+    ],
+    technologies: ['MySQL', 'PostgreSQL', 'SQLite', 'Python', 'Node.js'],
+    lesson:
+      'Probe query/search parameters for SQL injection (error, boolean-blind, sleep/waitfor time-based); template parameters for SSTI expressions (${7*7}, {{7*7}}, <%= 7*7 %>); and OS command parameters using separators (;, |, &&, `, $()) with sleep or out-of-band checks.',
+    recommendedChecks: [
+      "' OR '1'='1",
+      'SLEEP(5)',
+      'pg_sleep(5)',
+      '${7*7}',
+      '{{7*7}}',
+      '; sleep 5 ;',
+      '| id',
+    ],
+    avoidMissing: [
+      'time-based blind injection',
+      'SSTI expression evaluation in error pages/emails',
+      'JSON body parameter injection',
+    ],
+    source: 'builtin OWASP A03 guidance',
+    createdAt: '2026-06-03T00:00:00.000Z',
+    confidence: 0.92,
+    scope: 'builtin',
+  },
+  {
+    id: 'builtin-owasp-ssrf-recon',
+    title: 'Server-Side Request Forgery (SSRF) and cloud metadata',
+    category: 'vulnerability-pattern',
+    triggers: [
+      'ssrf',
+      'metadata.google',
+      '169.254.169.254',
+      'imds',
+      'internal port scan',
+    ],
+    technologies: ['AWS', 'GCP', 'Azure', 'Node.js', 'Python', 'Go'],
+    lesson:
+      'When the application fetches remote URLs, test for SSRF against cloud instance metadata (http://169.254.169.254/latest/meta-data/, http://metadata.google.internal/) and internal services (127.0.0.1, localhost, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) using decimal/IPv6 bypasses.',
+    recommendedChecks: [
+      'http://169.254.169.254/latest/meta-data/',
+      'http://2130706433',
+      'http://[::1]:8080',
+      'http://localhost:80',
+      'DNS rebinding',
+    ],
+    avoidMissing: [
+      'AWS IMDSv1 tokenless metadata endpoint',
+      'internal port scanning via SSRF',
+      'alternative IP representations',
+    ],
+    source: 'builtin OWASP A10 guidance',
+    createdAt: '2026-06-03T00:00:00.000Z',
+    confidence: 0.9,
+    scope: 'builtin',
+  },
+  {
+    id: 'builtin-owasp-security-misconfig-actuator',
+    title: 'Spring Boot Actuator and debugging endpoint exposure',
+    category: 'recon-gap',
+    triggers: [
+      'actuator/env',
+      'actuator/heapdump',
+      'actuator/gateway',
+      'actuator/mappings',
+      'whitelabel error',
+    ],
+    technologies: ['Spring Boot', 'Java'],
+    lesson:
+      'When Spring Boot is detected, probe unauthenticated actuator endpoints that frequently expose credentials, environment variables, internal route maps, and memory dumps.',
+    recommendedChecks: [
+      '/actuator/env',
+      '/actuator/heapdump',
+      '/actuator/mappings',
+      '/actuator/gateway/routes',
+      '/actuator/beans',
+      '/actuator/httptrace',
+    ],
+    avoidMissing: [
+      '/actuator/heapdump memory analysis for plaintext passwords/keys',
+      '/actuator/env Spring Cloud config injection',
+    ],
+    source: 'builtin OWASP A05 guidance',
+    createdAt: '2026-06-03T00:00:00.000Z',
+    confidence: 0.91,
+    scope: 'builtin',
+  },
+  {
+    id: 'builtin-waf-bypass-origin-ip',
+    title: 'WAF blocking and origin IP / host header bypasses',
+    category: 'recon-gap',
+    triggers: [
+      'waf bypass',
+      'cf-ray',
+      'origin ip',
+      'host header bypass',
+      'modsecurity',
+    ],
+    technologies: ['Cloudflare', 'WAF', 'Nginx', 'Apache'],
+    lesson:
+      'When WAF blocks security payloads, search for the real backend origin IP via historical DNS (SecurityTrails, ViewDNS), SSL certificates (crt.sh), or headers. Test host header poisoning and bypass headers (X-Forwarded-For: 127.0.0.1, X-Real-IP, X-Originating-IP).',
+    recommendedChecks: [
+      'X-Forwarded-For: 127.0.0.1',
+      'X-Real-IP: 127.0.0.1',
+      'X-Originating-IP: 127.0.0.1',
+      'crt.sh origin search',
+      'payload case-permutation',
+    ],
+    avoidMissing: ['direct origin IP connection bypassing CDN/WAF', 'Host header tampering'],
+    source: 'builtin WAF evasion guidance',
+    createdAt: '2026-06-03T00:00:00.000Z',
+    confidence: 0.89,
+    scope: 'builtin',
+  },
 ];
 
 export class IntelligenceStore {
@@ -301,29 +496,33 @@ export class IntelligenceStore {
     const personal = await this.appendBatch(candidates, 'personal');
     return [...project, ...personal];
   }
+
+  async learnFromToolResult(
+    toolName: string,
+    output: string,
+    target?: string,
+    sourceSessionId?: string,
+  ): Promise<IntelligenceScenario[]> {
+    if (!output || output.length < 10) return [];
+    if (!['http', 'shell', 'web_fetch'].includes(toolName)) return [];
+    const candidates = extractToolResultScenarios(toolName, output, target, sourceSessionId);
+    if (candidates.length === 0) return [];
+    return this.appendBatch(candidates, 'project');
+  }
 }
 
 export function formatIntelligenceContext(results: SearchResult[]): string {
   if (results.length === 0) return '';
-  const out: string[] = [];
-  out.push('# Local Lepus Intelligence');
-  out.push('');
-  out.push(
-    'The following local intelligence scenarios matched this turn. Use them as scan-coverage guidance only; verify all claims with live evidence before reporting findings.',
-  );
-  for (const r of results.slice(0, 5)) {
+  const out: string[] = [
+    '# Local Lepus Intelligence (guidance only; verify claims with live evidence)',
+  ];
+  for (const r of results.slice(0, 4)) {
     const s = r.scenario;
-    out.push('');
-    out.push(`## ${s.title}`);
-    out.push(`Category: ${s.category} · Confidence: ${s.confidence}`);
-    out.push(`Matched: ${r.matched.slice(0, 8).join(', ') || 'context'}`);
-    out.push(`Lesson: ${s.lesson}`);
-    if (s.recommendedChecks.length > 0) {
-      out.push(`Recommended checks: ${s.recommendedChecks.slice(0, 12).join(', ')}`);
-    }
-    if (s.avoidMissing.length > 0) {
-      out.push(`Avoid missing: ${s.avoidMissing.slice(0, 8).join(', ')}`);
-    }
+    const checks =
+      s.recommendedChecks.length > 0 ? ` | checks: ${s.recommendedChecks.slice(0, 8).join(', ')}` : '';
+    const avoid =
+      s.avoidMissing.length > 0 ? ` | avoid missing: ${s.avoidMissing.slice(0, 4).join(', ')}` : '';
+    out.push(`- [${s.category}] ${s.title}: ${s.lesson}${checks}${avoid}`);
   }
   return out.join('\n');
 }
@@ -609,13 +808,247 @@ function detectTechnologies(text: string): string[] {
     [/\bexpress\b/i, 'Express'],
     [/\bpm2\b|ecosystem\.config/i, 'PM2'],
     [/\bnginx\b/i, 'nginx'],
+    [/\bapache\b/i, 'Apache'],
+    [/\bspring(?:\s+boot)?\b|\bactuator\b/i, 'Spring Boot'],
+    [/\bjava\b|\bstruts\b|\btomcat\b/i, 'Java'],
+    [/\bphp(?:\/\d)?\b|\bx-powered-by:\s*php/i, 'PHP'],
+    [/\bflask\b/i, 'Flask'],
+    [/\bdjango\b/i, 'Django'],
+    [/\bfastapi\b/i, 'FastAPI'],
+    [/\bpython\b/i, 'Python'],
+    [/\brails\b|\bruby\b/i, 'Ruby on Rails'],
+    [/\basp\.net\b|\biis\b|\b\.aspx\b/i, 'ASP.NET'],
+    [/\bgolang\b|\bgin-gonic\b/i, 'Go'],
+    [/\bdocker\b|\bk8s\b|\bkubernetes\b/i, 'Kubernetes'],
     [/\bpostgres(?:ql)?\b|\bpg\b/i, 'PostgreSQL'],
+    [/\bmysql\b|\bmariadb\b/i, 'MySQL'],
+    [/\bmongo(?:db)?\b/i, 'MongoDB'],
+    [/\bredis\b/i, 'Redis'],
     [/\bgraphql\b/i, 'GraphQL'],
     [/\bwordpress\b|\bwp-admin\b/i, 'WordPress'],
     [/\bsupabase\b/i, 'Supabase'],
     [/\baws\b|\bs3\b|\bcognito\b/i, 'AWS'],
+    [/\bcloudflare\b|\bcf-ray\b/i, 'Cloudflare'],
+    [/\bwaf\b|\bmodsecurity\b|\bakamaighost\b/i, 'WAF'],
   ];
   return checks.filter(([re]) => re.test(text)).map(([, name]) => name);
+}
+
+function extractToolResultScenarios(
+  toolName: string,
+  output: string,
+  _target?: string,
+  sourceSessionId?: string,
+): ScenarioInput[] {
+  const candidates: ScenarioInput[] = [];
+  const detected = detectTechnologies(output);
+
+  // 1. Server header extraction
+  const serverMatch = output.match(/(?:^|\r?\n)Server:\s*([^\r\n]+)/i);
+  if (serverMatch && serverMatch[1]) {
+    const rawServer = serverMatch[1].trim();
+    const serverLower = rawServer.toLowerCase();
+    if (serverLower.includes('nginx')) {
+      candidates.push({
+        id: 'learned-target-server-nginx',
+        title: `Target server: Nginx (${rawServer})`,
+        category: 'target-fingerprint',
+        triggers: ['nginx', 'server', 'alias', 'proxy_pass', 'traversal'],
+        technologies: ['nginx'],
+        lesson:
+          'Target runs Nginx. Test for off-by-slash alias directory traversal (location /files { alias /data/; }), CRLF injection in proxy headers, and unescaped URI variables in rewrite rules.',
+        recommendedChecks: [
+          'alias directory traversal (/files../)',
+          'CRLF proxy injection',
+          'Nginx 403 bypasses via X-Original-URL',
+        ],
+        avoidMissing: [
+          'off-by-slash alias directory traversal',
+          'header injection in reverse-proxy setups',
+        ],
+        source: `tool ${toolName}`,
+        sourceSessionId,
+        confidence: 0.9,
+        scope: 'project',
+      });
+    } else if (serverLower.includes('apache')) {
+      candidates.push({
+        id: 'learned-target-server-apache',
+        title: `Target server: Apache (${rawServer})`,
+        category: 'target-fingerprint',
+        triggers: ['apache', 'server', 'htaccess', 'server-status'],
+        technologies: ['Apache'],
+        lesson:
+          'Target runs Apache HTTP Server. Check for exposed .htaccess files, /server-status handler leaks, mod_proxy CVEs, and multi-view content negotiation.',
+        recommendedChecks: ['.htaccess', '/server-status', '/server-info', 'case-sensitive file variants'],
+        avoidMissing: ['/server-status metric leak', '.htaccess source read'],
+        source: `tool ${toolName}`,
+        sourceSessionId,
+        confidence: 0.9,
+        scope: 'project',
+      });
+    } else if (serverLower.includes('iis') || serverLower.includes('microsoft')) {
+      candidates.push({
+        id: 'learned-target-server-iis',
+        title: `Target server: Microsoft-IIS (${rawServer})`,
+        category: 'target-fingerprint',
+        triggers: ['iis', 'microsoft', 'asp.net', 'tilde', 'shortname'],
+        technologies: ['ASP.NET'],
+        lesson:
+          'Target runs Microsoft IIS. Test for 8.3 short filename disclosure (e.g. /~1*), web.config leaks, ASP.NET trace.axd, and path normalization differences.',
+        recommendedChecks: ['8.3 short filename enumeration (dir~1.txt)', 'web.config', '/trace.axd', 'elmah.axd'],
+        avoidMissing: ['IIS short filename disclosure', 'web.config credential exposure'],
+        source: `tool ${toolName}`,
+        sourceSessionId,
+        confidence: 0.9,
+        scope: 'project',
+      });
+    }
+  }
+
+  // 2. X-Powered-By / Framework header
+  const poweredMatch = output.match(/(?:^|\r?\n)X-Powered-By:\s*([^\r\n]+)/i);
+  if (poweredMatch && poweredMatch[1]) {
+    const rawPowered = poweredMatch[1].trim();
+    const pLower = rawPowered.toLowerCase();
+    if (pLower.includes('php')) {
+      candidates.push({
+        id: 'learned-framework-php',
+        title: `PHP backend detected (${rawPowered})`,
+        category: 'target-fingerprint',
+        triggers: ['php', 'x-powered-by', 'upload', 'type juggling', 'include'],
+        technologies: ['PHP'],
+        lesson:
+          'Target backend runs PHP. Test for PHP type juggling, file inclusion (LFI/RFI/wrapper php://filter), upload bypasses (.phtml, .phar, .php5), and disabled function bypasses.',
+        recommendedChecks: [
+          'php://filter/convert.base64-encode/resource=index.php',
+          '.phtml upload',
+          'loose comparison (== 0) in authentication',
+          'phpinfo.php',
+        ],
+        avoidMissing: ['php://filter wrappers for source reading', 'loose type comparison in auth tokens'],
+        source: `tool ${toolName}`,
+        sourceSessionId,
+        confidence: 0.9,
+        scope: 'project',
+      });
+    } else if (pLower.includes('express')) {
+      candidates.push({
+        id: 'learned-framework-express',
+        title: 'Express / Node.js backend detected',
+        category: 'target-fingerprint',
+        triggers: ['express', 'node', 'package.json', 'prototype pollution', 'eval'],
+        technologies: ['Node.js', 'Express'],
+        lesson:
+          'Target backend runs Node.js / Express. Test for prototype pollution (__proto__, constructor.prototype), SSRF via Axios/node-fetch, template injection, and package.json/env exposure.',
+        recommendedChecks: ['__proto__ parameter injection', 'package.json', '.env', 'ecosystem.config.js'],
+        avoidMissing: ['prototype pollution in JSON request bodies', 'PM2 ecosystem file leak'],
+        source: `tool ${toolName}`,
+        sourceSessionId,
+        confidence: 0.9,
+        scope: 'project',
+      });
+    }
+  }
+
+  // 3. WAF detection
+  if (
+    output.includes('CF-RAY:') ||
+    /Server:\s*cloudflare/i.test(output) ||
+    output.includes('X-Iinfo:') ||
+    output.includes('AkamaiGHost') ||
+    (output.includes('403 Forbidden') && /cloudflare|imperva|akamai|waf|security/i.test(output))
+  ) {
+    candidates.push({
+      id: 'learned-waf-detected',
+      title: 'Active WAF detected on target',
+      category: 'target-fingerprint',
+      triggers: ['waf', 'cloudflare', '403 forbidden', 'blocked', 'origin bypass'],
+      technologies: ['Cloudflare', 'WAF'],
+      lesson:
+        'Target is behind a WAF or CDN. Avoid aggressive payload bursts. Investigate origin IP bypasses using historical DNS / SSL certificates, chunked transfer encoding, and X-Forwarded-For origin headers.',
+      recommendedChecks: [
+        'origin IP direct probe',
+        'chunked transfer encoding',
+        'X-Forwarded-For: 127.0.0.1',
+        'payload case permutation',
+      ],
+      avoidMissing: ['origin IP discovery to bypass WAF rules completely'],
+      source: `tool ${toolName}`,
+      sourceSessionId,
+      confidence: 0.88,
+      scope: 'project',
+    });
+  }
+
+  // 4. Spring Boot signature
+  if (/whitelabel error page/i.test(output) || /"status":\s*(?:404|500).*?"error":/i.test(output)) {
+    candidates.push({
+      id: 'learned-target-framework-springboot',
+      title: 'Spring Boot application detected',
+      category: 'target-fingerprint',
+      triggers: ['spring', 'boot', 'actuator', 'whitelabel', 'heapdump'],
+      technologies: ['Spring Boot', 'Java'],
+      lesson:
+        'Spring Boot error signature detected. Enumerate actuator endpoints for sensitive configurations, routing rules, and heap memory dumps.',
+      recommendedChecks: [
+        '/actuator/env',
+        '/actuator/heapdump',
+        '/actuator/gateway/routes',
+        '/actuator/mappings',
+        '/actuator/beans',
+      ],
+      avoidMissing: ['/actuator/heapdump memory analysis for credentials'],
+      source: `tool ${toolName}`,
+      sourceSessionId,
+      confidence: 0.92,
+      scope: 'project',
+    });
+  }
+
+  // 5. WordPress signature
+  if (/wp-content\/|wp-includes\/|\/wp-json\//i.test(output)) {
+    candidates.push({
+      id: 'learned-target-cms-wordpress',
+      title: 'WordPress CMS detected',
+      category: 'target-fingerprint',
+      triggers: ['wordpress', 'wp-content', 'wp-json', 'xmlrpc.php'],
+      technologies: ['WordPress', 'PHP'],
+      lesson:
+        'WordPress installation detected. Enumerate users via /wp-json/wp/v2/users, test xmlrpc.php for brute force/pingbacks, and inspect plugin versions.',
+      recommendedChecks: ['/wp-json/wp/v2/users', '/xmlrpc.php', '/wp-content/plugins/', '/readme.html'],
+      avoidMissing: ['WordPress user enumeration via REST API', 'xmlrpc.php multicall'],
+      source: `tool ${toolName}`,
+      sourceSessionId,
+      confidence: 0.9,
+      scope: 'project',
+    });
+  }
+
+  // 6. Open ports / services from shell / nmap recon
+  const portMatches = [...output.matchAll(/(\d{2,5})\/(?:tcp|udp)\s+open\s+([a-z0-9_-]+)/gi)];
+  for (const pm of portMatches.slice(0, 5)) {
+    const port = pm[1];
+    const service = pm[2];
+    if (port && service) {
+      candidates.push({
+        id: `learned-open-port-${port}-${service}`,
+        title: `Open service on port ${port} (${service})`,
+        category: 'recon-gap',
+        triggers: [port, service, 'port', 'open', 'service'],
+        technologies: [service],
+        lesson: `Port ${port} is open running ${service}. Investigate service version, default credentials, and unauthenticated access vectors.`,
+        recommendedChecks: [`check port ${port} banner and version`, `test default credentials for ${service}`],
+        avoidMissing: [`unauthenticated access on port ${port}`],
+        source: `tool ${toolName}`,
+        sourceSessionId,
+        confidence: 0.85,
+        scope: 'project',
+      });
+    }
+  }
+
+  return dedupeScenarioInputs(candidates).slice(0, 10);
 }
 
 function extractTriggers(text: string): string[] {

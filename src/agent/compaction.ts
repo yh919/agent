@@ -179,7 +179,7 @@ export function boundedHistoryForCompaction(messages: Message[]): string {
 /** Keep this many most-recent tool results at full size. */
 export const MICROCOMPACT_KEEP_RECENT = 4;
 /** Soft cap per older tool-result body (chars) when microcompacting. */
-export const MICROCOMPACT_MAX_TOOL_CHARS = 800;
+export const MICROCOMPACT_MAX_TOOL_CHARS = 600;
 export const MICROCOMPACT_PREFIX = '[tool output microcompacted';
 
 export interface MicrocompactOptions {

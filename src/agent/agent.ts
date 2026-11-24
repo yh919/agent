@@ -37,6 +37,7 @@ import {
   formatHistoryForCompaction,
   formatPinnedMemory,
   mergeMemory,
+  microcompactMessages,
 } from './compaction.js';
 import type { AgentEvent, TodoItem } from './events.js';
 import { MaxStepsError } from './events.js';
@@ -1091,9 +1092,17 @@ export class Agent {
       // the working copy if we've grown past the threshold (M2).
       if (this.autoCompactThreshold > 0) this.guardWorkingContext(working, emit, opts);
 
+      // Microcompact older tool-results in the request messages to prevent
+      // multi-step turns from repeatedly re-sending megabytes of tool outputs.
+      // Keeps the last 3 tool results full, shrinking older ones to 600 chars max.
+      const sendMessages = microcompactMessages(working, {
+        keepRecentToolResults: 3,
+        maxToolResultChars: 600,
+      }).messages;
+
       const req: ChatRequest = {
         model: this.client.model(),
-        messages: working,
+        messages: sendMessages,
       };
       if (opts?.tools !== false) req.tools = this.tools.asLLMTools();
       const { resp, streamed } = await this.chat(req, signal, emit);
@@ -1421,6 +1430,16 @@ export class Agent {
         duration_ms: durationMs,
         err: errStr,
       });
+    }
+    // Live tool-result intelligence: continuous extraction from HTTP responses,
+    // shell outputs, and recon discoveries without waiting for compaction.
+    if (this.intelligence && executed && !runErr) {
+      void this.intelligence.learnFromToolResult(
+        tc.function.name,
+        result,
+        this.target.baseURL() || this.target.name(),
+        this.store?.id || undefined,
+      );
     }
     // Fire-and-forget: post-tool-call hooks never block the turn or fail the
     // call. Skips the pre-tool-call-veto/allowed-tools-block cases since

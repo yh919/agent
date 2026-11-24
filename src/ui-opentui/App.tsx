@@ -90,6 +90,7 @@ import { SecretInputModal, type SecretInputRequest } from './SecretInputModal.js
 import { SkillsModal } from './SkillsModal.js';
 import { SlashMenu } from './SlashMenu.js';
 import { StatusBar } from './StatusBar.js';
+import { computeAutocomplete } from '../ui/autocomplete.js';
 
 export type { AppProps, ApplyProvider, PersistDisabledSkills } from '../ui/appTypes.js';
 
@@ -492,6 +493,14 @@ export function App({
       mentionDirBase ? listMentionDir(mentionDirBase.dir, mentionDirBase.base, MENTION_LIMIT) : [],
     [mentionDirBase],
   );
+
+  const autocomplete = useMemo(() => {
+    return computeAutocomplete(inputValue, input.cursor, {
+      history: historyRef.current,
+      skills: skillSlashItems,
+      sessionNames: listSessions?.().map((s) => s.name || s.id),
+    });
+  }, [inputValue, input.cursor, skillSlashItems, listSessions]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputValue is a deliberate proxy trigger — see ../ui/App.tsx's identical comment.
   useEffect(() => {
@@ -1157,6 +1166,12 @@ export function App({
       }
     }
 
+    // 4b. Inline autocomplete completion on Tab (when no dropdown menu is active).
+    if (e.name === 'tab' && !e.shift && autocomplete) {
+      input.setValue(autocomplete.fullValue);
+      return;
+    }
+
     // 5. Normal multi-line input editing — stays available while the agent
     //    runs so the prompt box never freezes on "planning…".
 
@@ -1232,6 +1247,10 @@ export function App({
       return;
     }
     if (e.name === 'right') {
+      if (autocomplete && input.cursor === inputValue.length) {
+        input.setValue(autocomplete.fullValue);
+        return;
+      }
       input.moveRight();
       return;
     }
@@ -1483,6 +1502,7 @@ export function App({
               width={chatWidth}
               variant="line"
               hint={hintText}
+              suggestion={autocomplete?.ghostText}
             />
             <StatusBar
               busy={state.busy}

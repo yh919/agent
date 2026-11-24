@@ -27,6 +27,8 @@ export interface InputProps {
   cursor: number;
   disabled?: boolean;
   hint?: string;
+  /** Inline ghost-text suggestion displayed after the cursor. */
+  suggestion?: string;
   /** Column width of the chat pane. */
   width?: number;
   /** Visual style: 'frame' (rounded box) or 'line' (divider line above). Default 'frame'. */
@@ -210,6 +212,11 @@ export function Input(props: InputProps) {
               <text fg={theme.brand}>{theme.glyphs.cursor}</text>
             )}
             {tail ? <text fg={theme.text}>{tail}</text> : null}
+            {props.suggestion && !tail ? (
+              <text fg={theme.muted} attributes={TextAttributes.DIM}>
+                {props.suggestion}
+              </text>
+            ) : null}
           </box>
         );
       })}

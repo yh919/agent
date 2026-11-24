@@ -8,9 +8,9 @@ import { join } from 'node:path';
 import { redact } from '../redact/index.js';
 
 /** Results longer than this are written to disk and replaced in history. */
-export const OFFLOAD_CHAR_THRESHOLD = 4_000;
+export const OFFLOAD_CHAR_THRESHOLD = 2_500;
 /** Preview kept in the LLM-facing tool message. */
-export const OFFLOAD_PREVIEW_CHARS = 1_200;
+export const OFFLOAD_PREVIEW_CHARS = 600;
 
 export interface OffloadResult {
   /** What goes into history / the next LLM turn. */

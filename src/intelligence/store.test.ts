@@ -200,4 +200,46 @@ describe('IntelligenceStore', () => {
     expect(text).toContain('ecosystem.config.js');
     expect(text.length).toBeLessThan(1600);
   });
+
+  it('includes OWASP Top 10 and Upload2Shell built-in intelligence', () => {
+    const root = tempRoot();
+    const store = new IntelligenceStore({ cwd: join(root, 'project'), home: join(root, 'home') });
+
+    const uploadRes = store.search('file upload multipart avatar php shell', 1);
+    expect(uploadRes[0]?.scenario.title).toContain('Upload2Shell');
+    expect(uploadRes[0]?.scenario.recommendedChecks).toContain('.phtml');
+
+    const idorRes = store.search('api user id authorization idor 403', 1);
+    expect(idorRes[0]?.scenario.title).toContain('Broken Access Control');
+
+    const sqliRes = store.search('sql query mysql command injection sleep', 1);
+    expect(sqliRes[0]?.scenario.title).toContain('Injection');
+  });
+
+  it('learns live target intelligence from tool results', async () => {
+    const root = tempRoot();
+    const store = new IntelligenceStore({ cwd: join(root, 'project'), home: join(root, 'home') });
+
+    const httpOutput = [
+      'HTTP/1.1 200 OK',
+      'Server: nginx/1.18.0 (Ubuntu)',
+      'X-Powered-By: PHP/8.1.2',
+      'Content-Type: text/html',
+      '',
+      '<html>wp-content/themes/lepus</html>',
+    ].join('\r\n');
+
+    const learned = await store.learnFromToolResult('http', httpOutput, 'http://test.local');
+    expect(learned.length).toBeGreaterThan(0);
+
+    const nginxScen = learned.find((s) => s.id.includes('nginx'));
+    expect(nginxScen).toBeDefined();
+    expect(nginxScen?.recommendedChecks).toContain('alias directory traversal (/files../)');
+
+    const phpScen = learned.find((s) => s.id.includes('php'));
+    expect(phpScen).toBeDefined();
+
+    const wpScen = learned.find((s) => s.id.includes('wordpress'));
+    expect(wpScen).toBeDefined();
+  });
 });
