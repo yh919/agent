@@ -38,6 +38,7 @@ export interface Message {
 export interface SessionFile {
   updated_at: string;
   id?: string;
+  name?: string;
   target?: ReturnType<Target['toJSON']> | null;
   memory?: SessionMemory | null;
   messages: Message[];
@@ -90,18 +91,29 @@ export function dirFromPath(path: string): string {
 // the hot autosave path while still flushing to durable storage periodically.
 const FSYNC_EVERY = 5;
 
+export function slugifySessionName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/(^-+|-+$)/g, '')
+    .slice(0, 64);
+}
+
 export class Store {
-  readonly path: string;
-  readonly id: string;
+  path: string;
+  id: string;
+  name?: string;
   private saveCount = 0;
 
-  constructor(path: string, id = '') {
+  constructor(path: string, id = '', name?: string) {
     this.path = path;
     this.id = id;
+    this.name = name;
   }
 
-  static newWithID(dir: string, id: string): Store {
-    return new Store(join(dir, `${id}.json`), id);
+  static newWithID(dir: string, id: string, name?: string): Store {
+    return new Store(join(dir, `${id}.json`), id, name);
   }
 
   contextSnapshotPath(): string {
@@ -109,14 +121,15 @@ export class Store {
     return join(dirname(dirname(this.path)), 'context', `${id}.md`);
   }
 
-  load(): { messages: Message[]; target: Target | null; memory: SessionMemory | null } {
+  load(): { messages: Message[]; target: Target | null; memory: SessionMemory | null; name?: string } {
     if (!this.path || !existsSync(this.path)) {
       return { messages: [], target: null, memory: null };
     }
     const buf = readFileSync(this.path, 'utf8');
     const raw = JSON.parse(buf) as Partial<SessionFile>;
+    if (raw.name) this.name = raw.name;
     const target = raw.target ? Target.fromJSON(raw.target) : null;
-    return { messages: raw.messages ?? [], target, memory: raw.memory ?? null };
+    return { messages: raw.messages ?? [], target, memory: raw.memory ?? null, name: raw.name };
   }
 
   async save(
@@ -132,6 +145,7 @@ export class Store {
     const file: SessionFile = {
       updated_at: new Date().toISOString(),
       id: this.id || undefined,
+      name: this.name || undefined,
       target: persistedTarget,
       memory: memory ?? undefined,
       messages,
@@ -144,6 +158,68 @@ export class Store {
     const shouldFsync = this.saveCount === 1 || this.saveCount % FSYNC_EVERY === 0;
 
     await atomicWriteFile(this.path, body, { mode: 0o600, fsync: shouldFsync });
+  }
+
+  async rename(
+    newName: string,
+    messages: Message[],
+    target: Target | null,
+    memory?: SessionMemory | null,
+  ): Promise<{ id: string; name: string; path: string }> {
+    const trimmed = newName.trim();
+    if (!trimmed) throw new Error('session name cannot be empty');
+
+    const slug = slugifySessionName(trimmed);
+    const newId = slug || trimmed.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 64) || 'session';
+    validateID(newId);
+
+    const dir = dirname(this.path);
+    const oldPath = this.path;
+    const oldSnapshot = this.contextSnapshotPath();
+
+    let targetPath = join(dir, `${newId}.json`);
+    let finalId = newId;
+
+    if (targetPath !== oldPath && existsSync(targetPath)) {
+      for (let i = 2; ; i += 1) {
+        const altId = `${newId}-${i}`;
+        const altPath = join(dir, `${altId}.json`);
+        if (!existsSync(altPath) || altPath === oldPath) {
+          finalId = altId;
+          targetPath = altPath;
+          break;
+        }
+      }
+    }
+
+    this.id = finalId;
+    this.name = trimmed;
+    this.path = targetPath;
+
+    await this.save(messages, target, memory);
+
+    if (oldPath && oldPath !== targetPath && existsSync(oldPath)) {
+      try {
+        unlinkSync(oldPath);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (existsSync(oldSnapshot)) {
+      const newSnapshot = this.contextSnapshotPath();
+      if (oldSnapshot !== newSnapshot) {
+        try {
+          const content = readFileSync(oldSnapshot, 'utf8');
+          await atomicWriteFile(newSnapshot, content, { mode: 0o600, fsync: true });
+          unlinkSync(oldSnapshot);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    return { id: this.id, name: this.name, path: this.path };
   }
 
   async clear(): Promise<void> {
@@ -206,6 +282,7 @@ export function cleanupStaleTemps(dir: string, maxAgeMs: number): void {
 
 export interface Summary {
   id: string;
+  name?: string;
   path: string;
   updatedAt: Date;
   preview: string;
@@ -253,12 +330,15 @@ export function listDir(dir: string): Summary[] {
       continue;
     }
     const id = raw.id ?? c.name.replace(/\.json$/, '');
+    const name = raw.name;
     const updatedAt = raw.updated_at ? new Date(raw.updated_at) : c.updatedAt;
+    const preview = name ? name : firstUserPreview(raw.messages ?? [], 80);
     out.push({
       id,
+      name,
       path: c.full,
       updatedAt,
-      preview: firstUserPreview(raw.messages ?? [], 80),
+      preview,
     });
   }
   // If we had more, still return sorted by the parsed updatedAt

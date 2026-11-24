@@ -107,6 +107,8 @@ export class Store {
     const freshIndex = await this.loadIndex();
     freshIndex[key] = { path, finding };
     await this.saveIndex(freshIndex);
+    // Always keep aggregate reports (report.md, report.html) refreshed on disk.
+    await this.writeAllReports().catch(() => undefined);
     return { path, duplicate: false };
   }
 
@@ -117,6 +119,13 @@ export class Store {
       .filter((e) => existsSync(e.path))
       .map((e) => e.finding)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  /** Renders every recorded finding into report.md AND report.html, keeping them up to date. */
+  async writeAllReports(): Promise<{ mdPath: string; htmlPath: string; count: number }> {
+    const md = await this.writeReport('markdown');
+    const html = await this.writeReport('html');
+    return { mdPath: md.path, htmlPath: html.path, count: md.count };
   }
 
   /** Renders every recorded finding into one report file and returns its path + finding count. */

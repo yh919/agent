@@ -35,10 +35,10 @@ function nextSelectable(options: Option[], from: number, dir: 1 | -1): number {
 }
 
 export function AskModal({ req }: { req: AskRequest }) {
-  const { width: columns } = useTerminalDimensions();
+  const { width: columns, height: rows } = useTerminalDimensions();
   const options = req.question.options;
   const boxWidth = Math.max(20, Math.min(columns - 2, 100));
-  const compact = columns < 64;
+  const compact = columns < 64 || rows < 24;
   const windowSize = compact ? 4 : WINDOW;
   const [idx, setIdx] = useState(() => firstSelectable(options));
 

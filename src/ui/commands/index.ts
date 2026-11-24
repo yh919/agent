@@ -26,7 +26,9 @@ import {
   handleExit,
   handleHelp,
   handleMode,
+  handleRename,
   handleReset,
+  handleSession,
   handleYolo,
 } from './session.js';
 import {
@@ -121,6 +123,12 @@ export function handleSlash(
       return true;
     case '/clear':
       handleClear(ctx);
+      return true;
+    case '/rename':
+      handleRename(ctx);
+      return true;
+    case '/session':
+      handleSession(ctx);
       return true;
     case '/reset':
       handleReset(ctx);

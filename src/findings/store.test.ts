@@ -144,4 +144,20 @@ describe('Findings Store.writeReport', () => {
     const parsed = JSON.parse(readFileSync(result.path, 'utf8'));
     expect(parsed.runs[0].results).toEqual([]);
   });
+
+  it('automatically generates both report.md and report.html whenever a finding is saved', async () => {
+    const store = new Store(dir);
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(join(dir, 'report.md'))).toBe(false);
+    expect(existsSync(join(dir, 'report.html'))).toBe(false);
+
+    await store.save(makeFinding({ title: 'XSS in search', slug: 'xss-search', severity: 'medium' }));
+
+    expect(existsSync(join(dir, 'report.md'))).toBe(true);
+    expect(existsSync(join(dir, 'report.html'))).toBe(true);
+    const md = readFileSync(join(dir, 'report.md'), 'utf8');
+    const html = readFileSync(join(dir, 'report.html'), 'utf8');
+    expect(md).toContain('XSS in search');
+    expect(html).toContain('XSS in search');
+  });
 });

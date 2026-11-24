@@ -69,4 +69,18 @@ describe('ConfirmFindingTool', () => {
     expect(second).toContain('written to');
     expect(second).not.toContain('already recorded');
   });
+
+  it('feeds confirmed finding into intelligence when intelligence store is provided', async () => {
+    const store = new Store(dir);
+    const { IntelligenceStore } = await import('../intelligence/store.js');
+    const intel = new IntelligenceStore({ cwd: dir, home: join(dir, 'home') });
+    const tool = new ConfirmFindingTool(store, () => {}, intel);
+
+    await tool.run(baseArgs, new AbortController().signal, {} as Prompter);
+    await new Promise((r) => setTimeout(r, 50));
+
+    const matches = intel.search('Reflected XSS in search', 5);
+    expect(matches.length).toBeGreaterThan(0);
+    expect(matches[0]?.scenario.category).toBe('finding-pattern');
+  });
 });

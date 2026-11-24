@@ -3,6 +3,7 @@
 // emits a notifier callback so the TUI can show an in-transcript alert.
 
 import { type Finding, type Severity, type Store, slugify } from '../findings/store.js';
+import type { IntelligenceStore } from '../intelligence/store.js';
 import type { Prompter } from '../permission/permission.js';
 import { type Tool, argString } from './types.js';
 
@@ -13,10 +14,16 @@ export type FindingNotifier = (f: Finding, path: string) => void;
 export class ConfirmFindingTool implements Tool {
   private readonly store: Store;
   private readonly notifier: FindingNotifier;
+  private readonly intelligence?: IntelligenceStore | null;
 
-  constructor(store: Store, notifier: FindingNotifier = () => undefined) {
+  constructor(
+    store: Store,
+    notifier: FindingNotifier = () => undefined,
+    intelligence?: IntelligenceStore | null,
+  ) {
     this.store = store;
     this.notifier = notifier;
+    this.intelligence = intelligence;
   }
 
   name(): string {
@@ -103,6 +110,19 @@ export class ConfirmFindingTool implements Tool {
     const result = await this.store.save(finding);
     if (result.duplicate) {
       return `Finding "${finding.title}" already recorded at ${result.path} (same title+url+parameter) — skipped duplicate.`;
+    }
+
+    if (this.intelligence) {
+      const intelText = [
+        '## Confirmed findings',
+        `- ${finding.severity.toUpperCase()}: ${finding.title} on ${finding.url} - ${finding.impact}`,
+        finding.payload ? `  payload: ${finding.payload}` : '',
+        finding.curl ? `  curl: ${finding.curl}` : '',
+        finding.remediation ? `  remediation: ${finding.remediation}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+      void this.intelligence.learnFromText(intelText, finding.slug).catch(() => undefined);
     }
 
     this.notifier(finding, result.path);

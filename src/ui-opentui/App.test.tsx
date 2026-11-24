@@ -40,6 +40,12 @@ const bannerData: BannerData = {
   cwd: '/tmp/engagement',
 };
 
+async function pressEscapeAndWait(setup: Awaited<ReturnType<typeof testRender>>): Promise<void> {
+  setup.mockInput.pressEscape();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await setup.renderOnce();
+}
+
 let agent: Agent;
 let runSpy: ReturnType<typeof vi.fn>;
 let onExit: ReturnType<typeof vi.fn>;
@@ -211,13 +217,17 @@ describe('App (OpenTUI)', () => {
     expect(frame).toMatch(/❯ \/|❯ \/▌/);
   });
 
-  it('opens the provider picker when selecting /provider from the slash menu', async () => {
+  it('opens the provider picker when selecting /provider from the slash menu and closes on Escape', async () => {
     const setup = await mountApp();
     await pressAndFlush(setup, () => setup.mockInput.typeText('/'));
     await pressAndFlush(setup, () => setup.mockInput.pressArrow('down'));
     await pressAndFlush(setup, () => setup.mockInput.pressEnter());
-    const frame = setup.captureCharFrame();
+    let frame = setup.captureCharFrame();
     expect(frame).toContain('Select an LLM provider for this session');
+
+    await pressEscapeAndWait(setup);
+    frame = setup.captureCharFrame();
+    expect(frame).not.toContain('Select an LLM provider for this session');
   });
 
   it('surfaces a permission request published through bindPermPublisher as a modal', async () => {

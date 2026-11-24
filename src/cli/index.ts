@@ -635,7 +635,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
           (text) => noticeHolder.publish?.(text),
         );
       }
-    }),
+    }, intelligenceStore),
   );
   tools.register(
     new LoadSkillTool(skills, async (skillName, objective, signal) => {

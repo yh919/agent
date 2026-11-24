@@ -8,7 +8,7 @@ export function sessionPickerRequest(
   done: (id: string | null) => void,
 ): AskRequest {
   const NEW = '+ Start a new session';
-  const label = (s: Summary, i: number) => `${i + 1}. ${s.preview || '(empty)'}`;
+  const label = (s: Summary, i: number) => `${i + 1}. ${s.name ? `[${s.name}] ` : ''}${s.preview || '(empty)'}`;
   return {
     question: {
       header: 'Resume',
@@ -16,7 +16,7 @@ export function sessionPickerRequest(
       options: [
         ...sessions.map((s, i) => ({
           label: label(s, i),
-          description: `${relativeTime(s.updatedAt)} · ${s.id.slice(0, 8)}`,
+          description: `${relativeTime(s.updatedAt)} · ${s.id.slice(0, 8)}${s.name && s.preview && s.preview !== s.name ? ` · ${s.preview}` : ''}`,
         })),
         { label: NEW },
       ],

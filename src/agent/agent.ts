@@ -852,6 +852,22 @@ export class Agent {
     await this.save();
   }
 
+  /** Rename the current session, updating its stored name, ID, and file path. */
+  async renameSession(name: string): Promise<{ id: string; name: string; path: string }> {
+    if (!this.store) {
+      throw new Error('no session store active');
+    }
+    return this.store.rename(name, this.history, this.target, this.memory);
+  }
+
+  getSessionID(): string | null {
+    return this.store?.id ?? null;
+  }
+
+  getSessionName(): string | null {
+    return this.store?.name ?? null;
+  }
+
   // ---------- main loop ----------
 
   async run(

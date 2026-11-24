@@ -46,6 +46,16 @@ export const SLASH_ITEMS: SlashItem[] = [
   },
   { name: '/resume', description: 'switch to a previous session' },
   {
+    name: '/rename',
+    args: '<name>',
+    description: 'rename the current session (updates session name and file)',
+  },
+  {
+    name: '/session',
+    args: '[rename <name>|info|list]',
+    description: 'view or rename session details',
+  },
+  {
     name: '/effort',
     args: '[low|medium|high|xhigh|max|default]',
     description: 'how hard Claude thinks (subscription CLIs)',

@@ -103,6 +103,62 @@ export function handleClear(ctx: SlashContext): void {
   ctx.dispatch({ type: 'clear' });
 }
 
+export function handleRename(ctx: SlashContext): void {
+  const newName = ctx.rest.join(' ').trim();
+  if (!newName) {
+    const curId = ctx.agent.getSessionID() || 'none';
+    const curName = ctx.agent.getSessionName() || '(unnamed)';
+    ctx.dispatch({
+      type: 'append',
+      entry: {
+        kind: 'system',
+        text: `current session: ${curId} · name: ${curName}\nusage: /rename <new-name>`,
+      },
+    });
+    return;
+  }
+
+  void ctx.agent
+    .renameSession(newName)
+    .then((res) => {
+      ctx.dispatch({
+        type: 'append',
+        entry: {
+          kind: 'system',
+          text: `session renamed to "${res.name}" (id: ${res.id})`,
+        },
+      });
+    })
+    .catch((err: unknown) => {
+      ctx.dispatch({
+        type: 'append',
+        entry: {
+          kind: 'error',
+          text: `rename failed: ${(err as Error).message}`,
+        },
+      });
+    });
+}
+
+export function handleSession(ctx: SlashContext): void {
+  const sub = (ctx.rest[0] ?? '').toLowerCase();
+  if (sub === 'rename') {
+    ctx.rest = ctx.rest.slice(1);
+    handleRename(ctx);
+    return;
+  }
+
+  const curId = ctx.agent.getSessionID() || 'none';
+  const curName = ctx.agent.getSessionName() || '(unnamed)';
+  ctx.dispatch({
+    type: 'append',
+    entry: {
+      kind: 'system',
+      text: `Session:\n  id:   ${curId}\n  name: ${curName}\n\nCommands:\n  /rename <name>           rename current session\n  /resume                  switch to another session`,
+    },
+  });
+}
+
 export function handleReset(ctx: SlashContext): void {
   // Check isRunning() up front rather than racing agent.reset()'s own guard —
   // clearScreen()/dispatch('clear') below are irreversible on-screen actions

@@ -117,6 +117,51 @@ describe('session.Store', () => {
     const mode = statSync(outPath).mode & 0o777;
     expect(mode).toBe(0o600);
   });
+
+  it('renames a session file, updates id and name, and migrates context snapshot', async () => {
+    const sessionsDir = join(tmp, 'sessions');
+    const store = Store.newWithID(sessionsDir, 'initial-session-id');
+    const messages = [{ role: 'user' as const, content: 'test message' }];
+    const target = new Target();
+    target.setBaseURL('https://example.com');
+    await store.save(messages, target);
+    await store.saveContextSnapshot('# Context Snapshot');
+
+    const result = await store.rename('Auth Bypass Testing', messages, target);
+    expect(result.id).toBe('auth-bypass-testing');
+    expect(result.name).toBe('Auth Bypass Testing');
+
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(join(sessionsDir, 'initial-session-id.json'))).toBe(false);
+    expect(existsSync(join(sessionsDir, 'auth-bypass-testing.json'))).toBe(true);
+    expect(existsSync(join(tmp, 'context', 'auth-bypass-testing.md'))).toBe(true);
+
+    const loaded = store.load();
+    expect(loaded.name).toBe('Auth Bypass Testing');
+    expect(loaded.messages[0]?.content).toBe('test message');
+
+    const summaries = (await import('./store.js')).listDir(sessionsDir);
+    expect(summaries[0]?.id).toBe('auth-bypass-testing');
+    expect(summaries[0]?.name).toBe('Auth Bypass Testing');
+    expect(summaries[0]?.preview).toBe('Auth Bypass Testing');
+  });
+
+  it('resolves collision with a numerical suffix when target file exists', async () => {
+    const sessionsDir = join(tmp, 'sessions');
+    const existing = Store.newWithID(sessionsDir, 'target-test');
+    await existing.save([{ role: 'user' as const, content: 'first' }], null);
+
+    const store = Store.newWithID(sessionsDir, 'second-session');
+    await store.save([{ role: 'user' as const, content: 'second' }], null);
+
+    const result = await store.rename('Target Test', [{ role: 'user' as const, content: 'second' }], null);
+    expect(result.id).toBe('target-test-2');
+    expect(result.name).toBe('Target Test');
+
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(join(sessionsDir, 'target-test.json'))).toBe(true);
+    expect(existsSync(join(sessionsDir, 'target-test-2.json'))).toBe(true);
+  });
 });
 
 describe('session.cleanupStaleTemps', () => {

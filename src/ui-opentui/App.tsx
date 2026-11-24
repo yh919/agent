@@ -630,7 +630,7 @@ export function App({
 
       // /resume → pick a recent session; the CLI relaunches into it on exit
       // (session id is baked into per-session stores at startup).
-      if (agentValue.trim() === '/resume') {
+      if (agentValue.trim().startsWith('/resume')) {
         const sessions = listSessions?.().slice(0, 20) ?? [];
         if (!resumeSession || sessions.length === 0) {
           dispatch({
@@ -638,6 +638,21 @@ export function App({
             entry: { kind: 'system', text: 'no saved sessions to resume' },
           });
           return;
+        }
+        const resumeArg = agentValue.trim().slice('/resume'.length).trim();
+        if (resumeArg) {
+          const matched = sessions.find(
+            (s) =>
+              s.id === resumeArg ||
+              s.name?.toLowerCase() === resumeArg.toLowerCase() ||
+              s.id.startsWith(resumeArg),
+          );
+          if (matched) {
+            resumeSession(matched.id);
+            runCtl.current?.abort();
+            onExit?.();
+            return;
+          }
         }
         dispatch({
           type: 'set-ask',
@@ -787,9 +802,8 @@ export function App({
     ) - 1,
   );
   const hasPerm = Boolean(state.pendingPerm);
-  const hasModal = Boolean(
-    secretInput || state.pendingPerm || state.pendingAsk || state.pendingSkills,
-  );
+  const isOverlayModal = Boolean(secretInput || state.pendingAsk || state.pendingSkills);
+  const hasModal = hasPerm || isOverlayModal;
   const hasMenu = !hasModal && (mentionMatches.length > 0 || slashMatches.length > 0);
   const menuRows = hasMenu
     ? slashMatches.length > 0
@@ -803,7 +817,7 @@ export function App({
       : state.busy
         ? queueLen > 0
           ? `${queueLen} queued · Esc to cancel`
-          : 'Esc to cancel'
+          : undefined
         : undefined;
   const hintRows = hintText ? 1 : 0;
   // Footer composition in line mode:
@@ -812,7 +826,10 @@ export function App({
   //   + inputLines + softWrapExtra (input prompt rows)
   //   + hintRows (0 or 1)
   //   + 1 (status bar)
-  const normalFooterHeight = menuRows + 1 + inputLines + softWrapExtra + hintRows + 1;
+  //   + 1 (bottom breathing room so status/thinking doesn't sit glued to the dock/bezel)
+  const BOTTOM_BREATHING_ROOM = 1;
+  const normalFooterHeight =
+    menuRows + 1 + inputLines + softWrapExtra + hintRows + 1 + BOTTOM_BREATHING_ROOM;
 
   const permLayout = hasPerm
     ? computePermissionBudget({
@@ -827,9 +844,7 @@ export function App({
   const footerCeiling = Math.max(0, rows - bannerHeight - CHAT_MIN_HEIGHT);
   const footerRaw = hasPerm
     ? (permLayout?.footerHeight ?? FOOTER_MODAL)
-    : hasModal
-      ? FOOTER_MODAL
-      : normalFooterHeight;
+    : normalFooterHeight;
   const footerReserved = Math.min(footerRaw, footerCeiling);
   // Scroll region BELOW the banner. ChatPane outer height is forced to
   // (this + bannerHeight) so Chat + footer always fill exactly `rows`.
@@ -1359,6 +1374,33 @@ export function App({
   // Whatever rows the chat strip gives up belong to the footer.
   const footerHeight = Math.max(0, rows - bannerHeight - chatScrollHeight);
 
+  if (isOverlayModal) {
+    return (
+      <box
+        style={{
+          flexDirection: 'column',
+          width: cols,
+          height: rows,
+          justifyContent: 'center',
+          alignItems: 'center',
+          overflow: 'hidden',
+        }}
+      >
+        {secretInput ? (
+          <SecretInputModal req={secretInput} />
+        ) : state.pendingAsk ? (
+          <AskModal req={state.pendingAsk} />
+        ) : state.pendingSkills ? (
+          <SkillsModal
+            agent={agent}
+            persistDisabledSkills={persistDisabledSkills}
+            onClose={() => dispatch({ type: 'set-skills-picker', open: false })}
+          />
+        ) : null}
+      </box>
+    );
+  }
+
   return (
     <box
       style={{
@@ -1371,7 +1413,7 @@ export function App({
       onMouseScroll={(e) => {
         // Root-level wheel so scrolling works over input/status too, not
         // only when the pointer is over the chat pane.
-        if (secretInput || state.pendingPerm || state.pendingAsk || state.pendingSkills) return;
+        if (state.pendingPerm) return;
         if (!e.scroll) return;
         const step = Math.max(1, e.scroll.delta ?? 1) * 3;
         if (e.scroll.direction === 'up') scrollBy(step);
@@ -1412,29 +1454,19 @@ export function App({
           maxHeight: footerHeight,
           overflow: 'hidden',
           width: chatWidth,
-          justifyContent: hasModal ? 'center' : 'flex-end',
+          justifyContent: hasPerm ? 'center' : 'flex-end',
           alignItems: 'stretch',
         }}
       >
-        {secretInput ? (
-          <SecretInputModal req={secretInput} />
-        ) : state.pendingAsk ? (
-          <AskModal req={state.pendingAsk} />
-        ) : state.pendingPerm ? (
+        {state.pendingPerm ? (
           <PermissionModal
             req={state.pendingPerm}
             maxWidth={chatWidth}
             maxDetailLines={permDetailLines}
             maxHeight={footerReserved}
           />
-        ) : state.pendingSkills ? (
-          <SkillsModal
-            agent={agent}
-            persistDisabledSkills={persistDisabledSkills}
-            onClose={() => dispatch({ type: 'set-skills-picker', open: false })}
-          />
         ) : (
-          <box style={{ flexDirection: 'column', width: chatWidth }}>
+          <box style={{ flexDirection: 'column', width: chatWidth, paddingBottom: 1 }}>
             {mentionMatches.length > 0 ? (
               <MentionMenu
                 cwd={mentionDirBase?.dir ?? ''}
