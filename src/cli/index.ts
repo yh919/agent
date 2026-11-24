@@ -9,8 +9,18 @@ import './forceColor.js';
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { type FSWatcher, existsSync, watch as fsWatch, renameSync } from 'node:fs';
+import {
+  type FSWatcher,
+  accessSync,
+  existsSync,
+  constants as fsConstants,
+  watch as fsWatch,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
+import { dirname, delimiter as pathDelimiter, join as pathJoin } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import React from 'react';
 import { Agent } from '../agent/agent.js';
@@ -22,6 +32,19 @@ import { CaptureStore } from '../browser/store.js';
 import * as config from '../config/config.js';
 import { CoverageStore } from '../coverage/store.js';
 import { MemoryStore } from '../curatedMemory/store.js';
+import {
+  type Check,
+  EXTERNAL_TOOLS,
+  checkApiKey,
+  checkBackend,
+  checkConfig,
+  checkDataDir,
+  checkExternalTools,
+  checkNodeVersion,
+  checkProvider,
+  formatReport,
+  summarize,
+} from '../doctor/doctor.js';
 import { EngagementStore } from '../engagement/store.js';
 import { findingRequestForBurp } from '../findings/httpRequest.js';
 import { Store as FindingsStore } from '../findings/store.js';
@@ -119,6 +142,7 @@ interface ParsedFlags {
   debugSessionPath: string;
   listSkills: boolean;
   listTools: boolean;
+  doctor: boolean;
 }
 
 /** `--resume` with no id: choose from recent sessions before the TUI starts. */
@@ -144,6 +168,7 @@ function parseFlags(argv: string[]): ParsedFlags {
     debugSessionPath: process.env.LEPUS_DEBUG_SESSION_PATH ?? '',
     listSkills: false,
     listTools: false,
+    doctor: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -222,6 +247,12 @@ function parseFlags(argv: string[]): ParsedFlags {
       case '--list-tools':
         out.listTools = true;
         break;
+      // `lepus doctor` (bare subcommand) or `--doctor`: run preflight checks
+      // and exit, without launching the TUI.
+      case 'doctor':
+      case '--doctor':
+        out.doctor = true;
+        break;
     }
   }
   return out;
@@ -256,9 +287,11 @@ async function main(): Promise<number> {
 
   // Config.
   let cfg: config.Config;
+  let configErrorMsg = '';
   try {
     cfg = config.load();
   } catch (err) {
+    configErrorMsg = (err as Error).message;
     const badPath = config.configPath();
     const backupPath = `${badPath}.bad-${Date.now()}`;
     try {
@@ -345,6 +378,13 @@ async function main(): Promise<number> {
         }
       }
     }
+  }
+
+  // `lepus doctor`: run preflight diagnostics against the fully-resolved config
+  // and exit. Placed before the "no API key" hard stop below so doctor can
+  // report a missing key rather than exiting early with a bare message.
+  if (flags.doctor) {
+    return await runDoctor(cfg, configErrorMsg, rootCtl.signal);
   }
 
   // Browser MCP is opt-in PER SESSION via --browser, and never persisted:
@@ -1434,11 +1474,116 @@ async function runFirstRunPickerOpenTui(): Promise<config.ToolingProfile | null>
   });
 }
 
+/** True if `name` resolves to an executable on PATH, without running it. */
+function onPath(name: string): boolean {
+  const raw = process.env.PATH ?? '';
+  if (!raw) return false;
+  // On Windows, resolve against PATHEXT (.EXE/.CMD/…); elsewhere the bare name.
+  const exts =
+    process.platform === 'win32'
+      ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+      : [''];
+  for (const dir of raw.split(pathDelimiter)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = pathJoin(dir, name + ext.toLowerCase());
+      const candidateUpper = pathJoin(dir, name + ext);
+      for (const c of new Set([candidate, candidateUpper])) {
+        try {
+          accessSync(c, fsConstants.X_OK);
+          return true;
+        } catch {
+          // keep scanning
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/** True if we can create and remove a probe file in `dir`. */
+function dirWritable(dir: string): boolean {
+  try {
+    const probe = pathJoin(dir, `.lepus-doctor-${randomBytes(4).toString('hex')}`);
+    writeFileSync(probe, '', { mode: 0o600 });
+    unlinkSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Run `lepus doctor`: gather environment facts, evaluate the pure checks in
+ * doctor/doctor.ts, print the report, and return an exit code (1 on any fail).
+ * Best-effort throughout — a check that cannot gather its fact degrades to a
+ * warning rather than throwing.
+ */
+async function runDoctor(
+  cfg: config.Config,
+  configErrorMsg: string,
+  signal: AbortSignal,
+): Promise<number> {
+  const checks: Check[] = [];
+
+  checks.push(checkNodeVersion(process.versions.node));
+
+  const cfgPath = config.configPath();
+  checks.push(
+    checkConfig({
+      loaded: existsSync(cfgPath),
+      path: cfgPath,
+      error: configErrorMsg || undefined,
+    }),
+  );
+
+  const cli = isCliBackend(cfg.backend);
+  checks.push(checkBackend({ backend: cfg.backend, model: cfg.model, isCliBackend: cli }));
+  checks.push(
+    checkApiKey({
+      backend: cfg.backend,
+      isCliBackend: cli,
+      hasConfiguredKey: (cfg.api_key ?? '').trim() !== '',
+      env: process.env,
+    }),
+  );
+
+  // Provider reachability: build the client and run the tool-support probe.
+  // Any failure (bad config, offline backend, timeout) → reached:false.
+  let provider = { reached: false, toolSupport: 'unknown' as const, detail: '' } as Parameters<
+    typeof checkProvider
+  >[0];
+  try {
+    const client = llmFactory.newFromConfig(cfg);
+    const result = await probeToolSupport(client, signal);
+    provider = {
+      reached: true,
+      toolSupport: result.toolSupport,
+      detail: result.detail,
+    };
+  } catch (err) {
+    provider = { reached: false, toolSupport: 'unknown', detail: (err as Error).message };
+  }
+  checks.push(checkProvider(provider));
+
+  const found: Record<string, boolean> = {};
+  for (const t of EXTERNAL_TOOLS) found[t.name] = onPath(t.name);
+  checks.push(...checkExternalTools(found));
+
+  const dataDir = dirname(cfgPath);
+  checks.push(checkDataDir({ writable: dirWritable(dataDir), path: dataDir }));
+
+  process.stdout.write(formatReport(checks));
+  return summarize(checks).exitCode;
+}
+
 function printHelp(): void {
   process.stdout.write(`lepus ${VERSION}
 
 Usage:
   lepus [flags]
+  lepus doctor               run preflight checks (runtime, backend, key,
+                             LLM reachability, external tools) and exit
 
 Flags:
   --backend ollama|lmstudio|openai|openai-compat|kimi|groq|openrouter|deepseek|gemini|anthropic|naraya|dahl
@@ -1456,6 +1601,7 @@ Flags:
   --yolo                     YOLO mode: auto-approve non-sensitive tool calls
                              (alias: --dangerously-skip-permissions)
   --list-skills / --list-tools
+  --doctor                   same as the 'doctor' subcommand
   --log <path>
   --debug-session           write a complete JSONL session debug log
   --debug-session-path <p>  custom path for --debug-session

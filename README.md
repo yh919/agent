@@ -134,6 +134,16 @@ ollama pull qwen2.5-coder:32b
 lepus
 ```
 
+Verify your setup before an engagement — runtime, backend, API key, LLM
+reachability, and the external tools on your PATH:
+
+```sh
+lepus doctor
+```
+
+It prints a pass/warn/fail report and exits non-zero if anything is broken,
+so it also works as a CI/preflight gate.
+
 Inside the CLI:
 
 ```text
