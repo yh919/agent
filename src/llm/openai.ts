@@ -11,7 +11,11 @@ import type { Client, Pinger, StreamingClient } from './client.js';
 import { parseContentToolCalls } from './contentToolCalls.js';
 import { type BackendError, classifyBackend, parseRetryAfter } from './errors.js';
 import { newCallID } from './ids.js';
-import { kimiLocksTemperature, kimiSupportsThinkingToggle } from './providers.js';
+import {
+  OPENROUTER_DEFAULT_MAX_TOKENS,
+  kimiLocksTemperature,
+  kimiSupportsThinkingToggle,
+} from './providers.js';
 import { type RetryInfo, withRetry } from './retry.js';
 import type { ChatRequest, ChatResponse, Message, ToolCall, Usage } from './types.js';
 
@@ -126,7 +130,7 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
   readonly label: string;
   private readonly extraHeaders: Record<string, string>;
   private readonly temperature?: number;
-  private readonly maxTokens?: number;
+  private maxTokens?: number;
 
   constructor(
     baseURL: string,
@@ -212,6 +216,53 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
       }
       const raw = await resp.text();
       if (resp.status !== 200) {
+        if (resp.status === 402 && this.label === 'openrouter') {
+          const match = raw.match(/can only afford (\d+)/i);
+          if (match && match[1]) {
+            const afford = Number.parseInt(match[1], 10);
+            if (afford > 100) {
+              const clamped = Math.max(100, Math.min(afford - 50, 4000));
+              this.maxTokens = clamped;
+              body.max_tokens = clamped;
+              const { signal: retrySignal, dispose: retryDispose } = withTimeout(signal, CHAT_TIMEOUT_MS);
+              try {
+                const retryResp = await fetch(`${this.baseURL}/chat/completions`, {
+                  method: 'POST',
+                  headers: this.headers(),
+                  body: JSON.stringify(body),
+                  signal: retrySignal,
+                });
+                const retryRaw = await retryResp.text();
+                if (retryResp.status === 200) {
+                  const retryOut = JSON.parse(retryRaw) as OAIChatResp;
+                  if (!retryOut.error && retryOut.choices?.length) {
+                    const choice = retryOut.choices[0]!;
+                    const msg: Message = {
+                      role: 'assistant',
+                      content: this.trimLeakedTemplate(choice.message.content || ''),
+                    };
+                    if (choice.message.tool_calls?.length) {
+                      msg.toolCalls = choice.message.tool_calls.map<ToolCall>((tc) => ({
+                        id: tc.id ?? newCallID(),
+                        type: 'function',
+                        function: { name: tc.function.name, arguments: tc.function.arguments },
+                      }));
+                    }
+                    return {
+                      message: msg,
+                      finishReason: choice.finish_reason ?? '',
+                      usage: toUsage(retryOut.usage),
+                    };
+                  }
+                }
+              } catch {
+                // fall through to original error
+              } finally {
+                retryDispose();
+              }
+            }
+          }
+        }
         throw withRetryAfter(classifyBackend(this.label, null, resp.status, raw), resp);
       }
       let out: OAIChatResp;
@@ -448,6 +499,36 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
       }
       if (resp.status !== 200) {
         const raw = await resp.text();
+        if (resp.status === 402 && this.label === 'openrouter') {
+          const match = raw.match(/can only afford (\d+)/i);
+          if (match && match[1]) {
+            const afford = Number.parseInt(match[1], 10);
+            if (afford > 100) {
+              const clamped = Math.max(100, Math.min(afford - 50, 4000));
+              this.maxTokens = clamped;
+              body.max_tokens = clamped;
+              dispose();
+              const { signal: retrySignal, dispose: retryDispose } = withTimeout(signal, CHAT_TIMEOUT_MS);
+              try {
+                const retryResp = await fetch(`${this.baseURL}/chat/completions`, {
+                  method: 'POST',
+                  headers: { ...this.headers(), Accept: 'text/event-stream' },
+                  body: JSON.stringify(body),
+                  signal: retrySignal,
+                });
+                if (retryResp.status === 200) {
+                  return { resp: retryResp, dispose: retryDispose };
+                }
+                const retryRaw = await retryResp.text();
+                retryDispose();
+                throw withRetryAfter(classifyBackend(this.label, null, retryResp.status, retryRaw), retryResp);
+              } catch (err) {
+                retryDispose();
+                throw err;
+              }
+            }
+          }
+        }
         throw withRetryAfter(classifyBackend(this.label, null, resp.status, raw), resp);
       }
       return { resp, dispose };
@@ -541,9 +622,13 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
       body.temperature = this.temperature;
     }
     // Per-response cap bounds latency / runaway generations when configured.
-    if (this.maxTokens !== undefined && this.maxTokens > 0) {
-      if (this.label === 'kimi') body.max_completion_tokens = this.maxTokens;
-      else body.max_tokens = this.maxTokens;
+    // For OpenRouter, unconstrained max_tokens causes 402 pre-check errors
+    // because OpenRouter reserves balance for the model's max output (up to 131K tokens).
+    const effectiveMaxTokens =
+      this.maxTokens ?? (this.label === 'openrouter' ? OPENROUTER_DEFAULT_MAX_TOKENS : undefined);
+    if (effectiveMaxTokens !== undefined && effectiveMaxTokens > 0) {
+      if (this.label === 'kimi') body.max_completion_tokens = effectiveMaxTokens;
+      else body.max_tokens = effectiveMaxTokens;
     }
     // Ask the server for a terminal usage chunk on streams. Without this,
     // TokenAccountant under-reports input/output for the default streaming

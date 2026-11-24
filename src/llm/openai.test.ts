@@ -409,6 +409,13 @@ describe('OpenAIClient', () => {
     expect(lastHeaders?.['http-referer']).toBe('https://github.com/yh919/agent');
     expect(lastHeaders?.['x-openrouter-title']).toBe('Lepus');
     expect(lastHeaders?.authorization).toBe('Bearer sk-or');
+    expect(lastBody?.max_tokens).toBe(4000);
+  });
+
+  it('caps max_tokens for OpenRouter by default to prevent credit pre-check 402', async () => {
+    const c = new OpenAIClient(baseURL, 'sk-or', 'openrouter/auto', 'openrouter');
+    await c.chat({ model: 'openrouter/auto', messages: [{ role: 'user', content: 'hi' }] });
+    expect(lastBody?.max_tokens).toBe(4000);
   });
 
   it('adds LM Studio stop tokens and trims leaked chat-template roles', async () => {

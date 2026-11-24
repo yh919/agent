@@ -92,6 +92,11 @@ export const GROQ_MODELS = [
 export const OPENROUTER_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 export const OPENROUTER_DEFAULT_MODEL = 'openrouter/auto';
 export const OPENROUTER_RECOMMENDED_MODELS = ['openrouter/auto'];
+// OpenRouter models can carry up to 131K output token capacity. When max_tokens
+// is omitted, OpenRouter reserves user credit for the maximum output (131072),
+// triggering 402 errors for users without high credit balances. Defaulting to
+// 4000 bounds generation latency and keeps credit pre-check within budget.
+export const OPENROUTER_DEFAULT_MAX_TOKENS = 4000;
 
 // Official OpenAI Chat Completions API (Bearer key, /v1). Distinct from
 // openai-compat (any third-party base URL).

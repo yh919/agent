@@ -27,6 +27,7 @@ import {
   OPENAI_DEFAULT_BASE_URL,
   OPENAI_DEFAULT_MODEL,
   OPENROUTER_DEFAULT_BASE_URL,
+  OPENROUTER_DEFAULT_MAX_TOKENS,
   OPENROUTER_DEFAULT_MODEL,
 } from './providers.js';
 
@@ -124,7 +125,10 @@ export function newFromConfig(cfg: Config): Client {
           'HTTP-Referer': 'https://github.com/yh919/agent',
           'X-OpenRouter-Title': 'Lepus',
         },
-        gen,
+        {
+          temperature: cfg.temperature,
+          maxTokens: cfg.max_tokens ?? OPENROUTER_DEFAULT_MAX_TOKENS,
+        },
       );
     case 'deepseek':
       if (!cfg.api_key) {

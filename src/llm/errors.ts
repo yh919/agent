@@ -223,6 +223,13 @@ function formatUnknown(err: BackendError, backend: string, detail: string): stri
       '→ /provider to set or re-test your API key',
     ].join('\n');
   }
+  if (code === 402) {
+    return [
+      `Insufficient credits on ${backend} (402)`,
+      detail || 'Your account balance is too low or max_tokens exceeds your balance.',
+      '→ top up credits at the provider, or switch model/provider via /model · /provider',
+    ].join('\n');
+  }
   if (code === 429) {
     return [
       `Rate limited by ${backend}`,

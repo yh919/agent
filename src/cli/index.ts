@@ -1342,6 +1342,14 @@ function effectiveAutoCompactThreshold(cfg: config.Config): number {
   ) {
     return CLI_AUTO_COMPACT_THRESHOLD;
   }
+  // OpenRouter models typically front large context windows (64K-128K+).
+  // Sizing the default to 32K gives realistic headroom before compaction.
+  if (
+    cfg.backend === 'openrouter' &&
+    cfg.auto_compact_threshold === config.DEFAULT_AUTO_COMPACT_THRESHOLD
+  ) {
+    return 32_000;
+  }
   return cfg.auto_compact_threshold;
 }
 
