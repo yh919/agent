@@ -122,6 +122,9 @@ const LMSTUDIO_STOP_TOKENS = [
  *  end of a chunk is at most this many chars, so that's all we ever withhold. */
 const MAX_STOP_TOKEN_LEN = Math.max(...LMSTUDIO_STOP_TOKENS.map((s) => s.length));
 const CHAT_TIMEOUT_MS = 10 * 60 * 1000;
+// Disable Bun's own ~300s fetch idle timeout (see ollama.ts) so slow local
+// servers (LM Studio, Ollama /v1) aren't cut off before the first byte.
+const NO_RUNTIME_TIMEOUT = { timeout: false } as RequestInit;
 
 export class OpenAIClient implements Client, StreamingClient, Pinger {
   readonly baseURL: string;
@@ -210,6 +213,7 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
           headers: this.headers(),
           body: JSON.stringify(body),
           signal: combinedSignal,
+          ...NO_RUNTIME_TIMEOUT,
         });
       } catch (err) {
         throw classifyBackend(this.label, err, 0, undefined);
@@ -231,6 +235,7 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
                   headers: this.headers(),
                   body: JSON.stringify(body),
                   signal: retrySignal,
+                  ...NO_RUNTIME_TIMEOUT,
                 });
                 const retryRaw = await retryResp.text();
                 if (retryResp.status === 200) {
@@ -493,6 +498,7 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
           headers: { ...this.headers(), Accept: 'text/event-stream' },
           body: JSON.stringify(body),
           signal: combinedSignal,
+          ...NO_RUNTIME_TIMEOUT,
         });
       } catch (err) {
         throw classifyBackend(this.label, err, 0, undefined);
@@ -515,6 +521,7 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
                   headers: { ...this.headers(), Accept: 'text/event-stream' },
                   body: JSON.stringify(body),
                   signal: retrySignal,
+                  ...NO_RUNTIME_TIMEOUT,
                 });
                 if (retryResp.status === 200) {
                   return { resp: retryResp, dispose: retryDispose };

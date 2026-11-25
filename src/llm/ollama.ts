@@ -61,6 +61,11 @@ function toUsage(prompt?: number, completion?: number): Usage | undefined {
   return { inputTokens: prompt ?? 0, outputTokens: completion ?? 0 };
 }
 const CHAT_TIMEOUT_MS = 10 * 60 * 1000;
+// Bun's fetch has its own ~300s idle timeout ("The operation timed out.")
+// that fires before the first byte when a local model is loading or doing
+// prompt eval on a big context. Disable it; CHAT_TIMEOUT_MS + the caller's
+// signal are the real bounds. Ignored by Node/undici.
+const NO_RUNTIME_TIMEOUT = { timeout: false } as RequestInit;
 // Floor for the context window when none is configured. Ollama silently
 // defaults to num_ctx=2048 and truncates input every turn; 8192 is a sane
 // minimum for agent histories. A probed/configured value overrides this.
@@ -168,6 +173,7 @@ export class OllamaClient implements Client, StreamingClient, Pinger {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
           signal: combinedSignal,
+          ...NO_RUNTIME_TIMEOUT,
         });
       } catch (err) {
         throw classifyBackend('ollama', err, 0, undefined);
@@ -289,6 +295,7 @@ export class OllamaClient implements Client, StreamingClient, Pinger {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
           signal: combinedSignal,
+          ...NO_RUNTIME_TIMEOUT,
         });
       } catch (err) {
         throw classifyBackend('ollama', err, 0, undefined);
