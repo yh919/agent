@@ -27,6 +27,7 @@ import { Agent } from '../agent/agent.js';
 import { BackgroundTaskManager } from '../agent/backgroundTasks.js';
 import type { AgentEvent } from '../agent/events.js';
 import type { PromptProfile } from '../agent/systemPrompt.js';
+import { AuthorizationStore } from '../authorization/store.js';
 import { type IngestServerHandle, startIngestServer } from '../browser/server.js';
 import { CaptureStore } from '../browser/store.js';
 import * as config from '../config/config.js';
@@ -514,6 +515,11 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
 
   // Findings store + notifier.
   const findingsStore = new FindingsStore('findings');
+  // Engagement authorization record (.lepus/agent/authorizations.json): the
+  // http tool asks the operator to confirm authorization the first time it
+  // sends active traffic to a host; reports include the record as evidence.
+  const authorizationStore = new AuthorizationStore();
+  findingsStore.setAuthorizationSource(() => authorizationStore.list());
   const captureStore = new CaptureStore({ maxEntries: 5000 });
 
   // Session id is computed up here (was previously right before Agent
@@ -599,7 +605,7 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
   tools.register(new FileEditToolAlias());
   tools.register(new GlobTool());
   tools.register(new GrepTool());
-  tools.register(new HTTPTool(target, scope));
+  tools.register(new HTTPTool(target, scope, authorizationStore));
   tools.register(new WebFetchTool(scope));
   tools.register(new WebSearchTool());
   tools.register(new AskUserTool(bridgedAsk));

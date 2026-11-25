@@ -7,9 +7,11 @@
 // polluting Node's global fetch.
 
 import { Agent, fetch as undiciFetch } from 'undici';
+import type { AuthorizationStore } from '../authorization/store.js';
 import type { Prompter } from '../permission/permission.js';
 import type { ScopeStore } from '../target/scope.js';
 import type { Target } from '../target/target.js';
+import { gateAuthorization } from './authGate.js';
 import { pinnedAgent } from './pinnedDispatcher.js';
 import { gatePrivateRequest, parseHTTPURL } from './privateHost.js';
 import { gateOutOfScope } from './scopeGate.js';
@@ -30,10 +32,12 @@ const insecureDispatcher = new Agent({
 export class HTTPTool implements Tool {
   private readonly target: Target;
   private readonly scope?: ScopeStore;
+  private readonly authorizations?: AuthorizationStore;
 
-  constructor(target: Target, scope?: ScopeStore) {
+  constructor(target: Target, scope?: ScopeStore, authorizations?: AuthorizationStore) {
     this.target = target;
     this.scope = scope;
+    this.authorizations = authorizations;
   }
 
   name(): string {
@@ -123,6 +127,10 @@ export class HTTPTool implements Tool {
     // an explicit, non-cached approval (or is hard-blocked if explicitly
     // denied). No-op when no scope has been configured.
     const scopeReason = await gateOutOfScope(p, parsedURL, signal, 'http', this.scope);
+    // Authorization guard: the first active request to a host with no operator
+    // acknowledgment on record asks the operator to confirm they are authorized
+    // to test it, and records the answer. No-op without a store (tests/headless).
+    const authNote = await gateAuthorization(p, parsedURL, signal, 'http', this.authorizations);
 
     const headers = new Headers();
     const hdrsArg = args.headers;
@@ -182,6 +190,9 @@ export class HTTPTool implements Tool {
     }
     if (scopeReason) {
       out = `note: out-of-scope host approved for this request (reason: ${scopeReason})\n\n${out}`;
+    }
+    if (authNote) {
+      out = `note: ${authNote}\n\n${out}`;
     }
     return out;
   }

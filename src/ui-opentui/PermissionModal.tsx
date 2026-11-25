@@ -52,6 +52,7 @@ function isShellTool(name: string): boolean {
 export function permissionTitle(tool: string): string {
   if (isShellTool(tool)) return 'Shell command';
   if (tool === 'http') return 'HTTP request';
+  if (tool === 'authorization') return 'Confirm authorization to test';
   if (tool === 'file_write' || tool === 'FileWriteTool') return 'Write file';
   if (tool === 'file_edit' || tool === 'FileEditTool') return 'Edit file';
   return displayToolName(tool);

@@ -522,12 +522,23 @@ per-finding detail with evidence, reproduction, and remediation. Open it in a
 browser and **Print → Save as PDF** for a client deliverable. All finding
 fields are HTML-escaped, so untrusted response excerpts can't inject markup.
 
+Both the Markdown and HTML reports include an **Authorization record** — every
+host that received active test traffic, and whether authorization to test it was
+acknowledged by the operator or auto-approved in YOLO mode (see below).
+
 ## Security Model
 
 - **Authorized use only**: built for permitted security work.
 - **Human-in-the-loop by default**: permission-gated tools require allow once,
   allow session, or deny. Use `/mode auto-safe` for read-only auto-approve, or
   `/yolo` only in labs.
+- **Authorization confirmation**: the first time the `http` tool sends active
+  traffic to a host, you're asked to confirm you're authorized to test it. The
+  answer is recorded per engagement in `.lepus/agent/authorizations.json`, so
+  you're asked once per host, and it's included in `/report`. YOLO still
+  auto-approves, but those hosts are recorded as *not operator-acknowledged*.
+  (Shell commands such as `curl` are covered by their own permission prompt,
+  not this gate.)
 - **Sensitive path protection**: high-risk local paths remain gated.
 - **Shell safeguards**: catastrophic command patterns are blocked before
   execution.

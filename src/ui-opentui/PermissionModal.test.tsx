@@ -8,6 +8,7 @@ import {
   computePermissionBudget,
   formatDetail,
   isCommandTool,
+  permissionTitle,
 } from './PermissionModal.js';
 
 /**
@@ -267,5 +268,12 @@ describe('PermissionModal key handling', () => {
     setup.mockInput.pressKey('x');
     setup.mockInput.pressArrow('up');
     expect(request.resolve).not.toHaveBeenCalled();
+  });
+});
+
+describe('permissionTitle', () => {
+  it('gives the authorization gate an explicit headline', () => {
+    expect(permissionTitle('authorization')).toBe('Confirm authorization to test');
+    expect(permissionTitle('http')).toBe('HTTP request');
   });
 });

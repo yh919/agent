@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import type { AuthorizationEntry } from '../authorization/store.js';
 import { atomicWriteFile } from '../persist/atomicFile.js';
 import { renderHtmlReport, renderMarkdownReport, renderSarifReport } from './report.js';
 
@@ -46,8 +47,17 @@ export class Store {
   // race with a concurrent save from another in-flight tool call.
   private queue: Promise<unknown> = Promise.resolve();
 
+  // Optional provider of the engagement authorization record, included in
+  // report.md / report.html as evidence. Wired by the CLI; absent in tests.
+  private authorizationSource?: () => AuthorizationEntry[];
+
   constructor(dir = 'findings') {
     this.dir = resolve(dir);
+  }
+
+  /** Include the engagement authorization record in generated reports. */
+  setAuthorizationSource(source: () => AuthorizationEntry[]): void {
+    this.authorizationSource = source;
   }
 
   /**
@@ -131,16 +141,22 @@ export class Store {
   /** Renders every recorded finding into one report file and returns its path + finding count. */
   async writeReport(format: ReportFormat = 'markdown'): Promise<{ path: string; count: number }> {
     const findings = await this.list();
+    let authorizations: AuthorizationEntry[] = [];
+    try {
+      authorizations = this.authorizationSource?.() ?? [];
+    } catch {
+      // A broken record must never block report generation.
+    }
     let content: string;
     let filename: string;
     if (format === 'sarif') {
       content = renderSarifReport(findings);
       filename = 'report.sarif.json';
     } else if (format === 'html') {
-      content = renderHtmlReport(findings);
+      content = renderHtmlReport(findings, { authorizations });
       filename = 'report.html';
     } else {
-      content = renderMarkdownReport(findings);
+      content = renderMarkdownReport(findings, { authorizations });
       filename = 'report.md';
     }
     const path = join(this.dir, filename);

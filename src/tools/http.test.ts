@@ -1,4 +1,8 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { AuthorizationStore } from '../authorization/store.js';
 import type { Prompter } from '../permission/permission.js';
 import { newTarget } from '../target/target.js';
 import { HTTPTool } from './http.js';
@@ -92,6 +96,61 @@ describe('HTTPTool', () => {
     expect(ask).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:8080/', expect.anything());
     expect(out).toContain('HTTP/1.1 200 OK');
+  });
+
+  it('blocks the first request to an unacknowledged host when authorization is denied', async () => {
+    fetchMock.mockClear();
+    const dir = mkdtempSync(join(tmpdir(), 'lepus-http-auth-'));
+    try {
+      const store = new AuthorizationStore({ cwd: dir });
+      const ask = vi.fn().mockResolvedValue('deny');
+      await expect(
+        new HTTPTool(newTarget(), undefined, store).run(
+          { url: 'http://example.test/api' },
+          new AbortController().signal,
+          { ask },
+        ),
+      ).rejects.toThrow(/not authorized to test example\.test/);
+      expect(ask).toHaveBeenCalledWith(
+        expect.objectContaining({ tool: 'authorization' }),
+        expect.anything(),
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('records the acknowledgment and notes it in the first response only', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lepus-http-auth-'));
+    try {
+      const store = new AuthorizationStore({ cwd: dir });
+      const ask = vi.fn().mockResolvedValue('allow-once');
+      const ok = () =>
+        new Response('ok', {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/plain' },
+        });
+      fetchMock.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok());
+      const tool = new HTTPTool(newTarget(), undefined, store);
+
+      const first = await tool.run({ url: 'http://example.test/a' }, new AbortController().signal, {
+        ask,
+      });
+      expect(first).toMatch(/note: authorization to test example\.test acknowledged/);
+      expect(store.isAcknowledged('example.test')).toBe(true);
+
+      const second = await tool.run(
+        { url: 'http://example.test/b' },
+        new AbortController().signal,
+        { ask },
+      );
+      expect(second).not.toMatch(/authorization/);
+      expect(ask).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('scopes session caching to the request origin', () => {

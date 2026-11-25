@@ -3,8 +3,22 @@
 // human-readable Markdown writeup (grouped by severity, full repro detail)
 // or a SARIF 2.1.0 log for ingestion into CI/security dashboards.
 
+import type { AuthorizationEntry } from '../authorization/store.js';
 import { render as renderFinding } from './store.js';
 import type { Finding, Severity } from './store.js';
+
+/** Optional context shared by the Markdown and HTML renderers. */
+export interface ReportOptions {
+  /** Engagement target shown under the title (HTML). */
+  target?: string;
+  /** Engagement authorization record (authorization/store.ts), shown as evidence. */
+  authorizations?: AuthorizationEntry[];
+}
+
+const AUTH_STATUS_LABEL: Record<AuthorizationEntry['status'], string> = {
+  acknowledged: 'Acknowledged by operator',
+  'auto-approved-yolo': 'Auto-approved (YOLO mode) — NOT operator-acknowledged',
+};
 
 const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
 
@@ -15,11 +29,32 @@ function groupBySeverity(findings: Finding[]): Map<Severity, Finding[]> {
   return map;
 }
 
-export function renderMarkdownReport(findings: Finding[]): string {
+function markdownAuthorizationSection(entries: AuthorizationEntry[] | undefined): string[] {
+  if (!entries || entries.length === 0) return [];
+  const cell = (v: string) => v.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  const lines = [
+    '## Authorization record',
+    '',
+    'Hosts that received active test traffic, and how authorization to test each was confirmed:',
+    '',
+    '| Host | Status | Recorded | First request |',
+    '|---|---|---|---|',
+  ];
+  for (const e of entries) {
+    lines.push(
+      `| ${cell(e.host)} | ${AUTH_STATUS_LABEL[e.status]} | ${cell(e.at)} | ${cell(e.url)} |`,
+    );
+  }
+  lines.push('');
+  return lines;
+}
+
+export function renderMarkdownReport(findings: Finding[], opts: ReportOptions = {}): string {
   const lines: string[] = [];
   lines.push('# Findings Report', '');
   lines.push(`Generated: ${new Date().toISOString()}`);
   lines.push(`Total findings: ${findings.length}`, '');
+  lines.push(...markdownAuthorizationSection(opts.authorizations));
 
   if (findings.length === 0) {
     lines.push('No findings recorded yet.');
@@ -120,11 +155,28 @@ table.meta td{padding:3px 0;vertical-align:top}
 .finding{padding:20px 0;border-top:1px solid #eee}
 ol.toc{padding-left:20px}ol.toc li{margin:3px 0}
 a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
+.auth-ok{color:#15803d;font-weight:600}.auth-warn{color:#b45309;font-weight:600}
 .foot{margin-top:48px;padding-top:12px;border-top:1px solid #eee;color:#999;font-size:12px}
 @media print{.wrap{max-width:none;padding:0}.finding{break-inside:avoid}h2{break-after:avoid}pre{white-space:pre-wrap}a{color:#1a1a1a}}
 `;
 
-export function renderHtmlReport(findings: Finding[], opts: { target?: string } = {}): string {
+function htmlAuthorizationSection(entries: AuthorizationEntry[] | undefined): string {
+  if (!entries || entries.length === 0) return '';
+  const rows = entries
+    .map(
+      (e) =>
+        `<tr><td><code>${esc(e.host)}</code></td><td class="${e.status === 'acknowledged' ? 'auth-ok' : 'auth-warn'}">${esc(AUTH_STATUS_LABEL[e.status])}</td><td>${esc(e.at)}</td><td><code>${esc(e.url)}</code></td></tr>`,
+    )
+    .join('');
+  return `<h2>Authorization record</h2>
+<p class="muted">Hosts that received active test traffic, and how authorization to test each was confirmed.</p>
+<table class="summary">
+<thead><tr><th>Host</th><th>Status</th><th>Recorded</th><th>First request</th></tr></thead>
+<tbody>${rows}</tbody>
+</table>`;
+}
+
+export function renderHtmlReport(findings: Finding[], opts: ReportOptions = {}): string {
   const grouped = groupBySeverity(findings);
   const generated = new Date().toISOString();
   const summaryRows = SEVERITY_ORDER.map(
@@ -169,6 +221,7 @@ ${targetLine}
 <thead><tr><th>Severity</th><th>Count</th><th>Indicative CVSS</th></tr></thead>
 <tbody>${summaryRows}</tbody>
 </table>
+${htmlAuthorizationSection(opts.authorizations)}
 ${empty}
 ${
   findings.length > 0

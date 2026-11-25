@@ -101,3 +101,42 @@ describe('renderHtmlReport', () => {
     expect(out).toContain('Target: https://app.example.com');
   });
 });
+
+describe('authorization record in reports', () => {
+  const auths = [
+    {
+      host: 'app.example.com',
+      status: 'acknowledged' as const,
+      at: '2026-11-25T10:00:00.000Z',
+      tool: 'http',
+      url: 'https://app.example.com/api',
+    },
+    {
+      host: 'lab.example.com',
+      status: 'auto-approved-yolo' as const,
+      at: '2026-11-25T11:00:00.000Z',
+      tool: 'http',
+      url: 'https://lab.example.com/<x>',
+    },
+  ];
+
+  it('renders a Markdown table, even with no findings yet', () => {
+    const out = renderMarkdownReport([], { authorizations: auths });
+    expect(out).toContain('## Authorization record');
+    expect(out).toContain('| app.example.com | Acknowledged by operator |');
+    expect(out).toContain('NOT operator-acknowledged');
+  });
+
+  it('renders an escaped HTML table', () => {
+    const out = renderHtmlReport([finding()], { authorizations: auths });
+    expect(out).toContain('<h2>Authorization record</h2>');
+    expect(out).toContain('Acknowledged by operator');
+    expect(out).toContain('https://lab.example.com/&lt;x&gt;');
+    expect(out).not.toContain('https://lab.example.com/<x>');
+  });
+
+  it('omits the section when there is no record', () => {
+    expect(renderMarkdownReport([finding()])).not.toContain('Authorization record');
+    expect(renderHtmlReport([finding()])).not.toContain('Authorization record');
+  });
+});
