@@ -154,7 +154,11 @@ describe('session.Store', () => {
     const store = Store.newWithID(sessionsDir, 'second-session');
     await store.save([{ role: 'user' as const, content: 'second' }], null);
 
-    const result = await store.rename('Target Test', [{ role: 'user' as const, content: 'second' }], null);
+    const result = await store.rename(
+      'Target Test',
+      [{ role: 'user' as const, content: 'second' }],
+      null,
+    );
     expect(result.id).toBe('target-test-2');
     expect(result.name).toBe('Target Test');
 

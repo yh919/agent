@@ -8,7 +8,8 @@ export function sessionPickerRequest(
   done: (id: string | null) => void,
 ): AskRequest {
   const NEW = '+ Start a new session';
-  const label = (s: Summary, i: number) => `${i + 1}. ${s.name ? `[${s.name}] ` : ''}${s.preview || '(empty)'}`;
+  const label = (s: Summary, i: number) =>
+    `${i + 1}. ${s.name ? `[${s.name}] ` : ''}${s.preview || '(empty)'}`;
   return {
     question: {
       header: 'Resume',

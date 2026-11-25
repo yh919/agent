@@ -52,6 +52,7 @@ import { formatPlanUsage, readPlanUsage } from '../llm/cliclient.js';
 import { formatUserError } from '../llm/errors.js';
 import type { BannerData } from '../ui/Banner.js';
 import type { AppProps } from '../ui/appTypes.js';
+import { computeAutocomplete } from '../ui/autocomplete.js';
 import {
   copyText,
   decodePasteEvent,
@@ -90,7 +91,6 @@ import { SecretInputModal, type SecretInputRequest } from './SecretInputModal.js
 import { SkillsModal } from './SkillsModal.js';
 import { SlashMenu } from './SlashMenu.js';
 import { StatusBar } from './StatusBar.js';
-import { computeAutocomplete } from '../ui/autocomplete.js';
 
 export type { AppProps, ApplyProvider, PersistDisabledSkills } from '../ui/appTypes.js';
 
@@ -851,9 +851,7 @@ export function App({
   // Cap every footer variant so banner + chat min + footer never exceeds
   // the terminal (short windows used to over-allocate FOOTER_MODAL=14).
   const footerCeiling = Math.max(0, rows - bannerHeight - CHAT_MIN_HEIGHT);
-  const footerRaw = hasPerm
-    ? (permLayout?.footerHeight ?? FOOTER_MODAL)
-    : normalFooterHeight;
+  const footerRaw = hasPerm ? (permLayout?.footerHeight ?? FOOTER_MODAL) : normalFooterHeight;
   const footerReserved = Math.min(footerRaw, footerCeiling);
   // Scroll region BELOW the banner. ChatPane outer height is forced to
   // (this + bannerHeight) so Chat + footer always fill exactly `rows`.

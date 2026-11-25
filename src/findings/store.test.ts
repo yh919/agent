@@ -151,7 +151,9 @@ describe('Findings Store.writeReport', () => {
     expect(existsSync(join(dir, 'report.md'))).toBe(false);
     expect(existsSync(join(dir, 'report.html'))).toBe(false);
 
-    await store.save(makeFinding({ title: 'XSS in search', slug: 'xss-search', severity: 'medium' }));
+    await store.save(
+      makeFinding({ title: 'XSS in search', slug: 'xss-search', severity: 'medium' }),
+    );
 
     expect(existsSync(join(dir, 'report.md'))).toBe(true);
     expect(existsSync(join(dir, 'report.html'))).toBe(true);

@@ -34,9 +34,7 @@ describe('Input', () => {
   });
 
   it('renders ghost text suggestion after cursor', async () => {
-    const frame = await renderFrame(
-      <Input value="/mode " cursor={6} suggestion="auto-safe" />,
-    );
+    const frame = await renderFrame(<Input value="/mode " cursor={6} suggestion="auto-safe" />);
     expect(frame).toContain('/mode ');
     expect(frame).toContain('auto-safe');
   });

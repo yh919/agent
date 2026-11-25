@@ -126,13 +126,7 @@ const BUILTIN_SCENARIOS: IntelligenceScenario[] = [
     id: 'builtin-owasp-broken-access-control',
     title: 'Broken Access Control and IDOR authorization testing',
     category: 'vulnerability-pattern',
-    triggers: [
-      'idor',
-      'bola',
-      'tenant_id',
-      'bypassing authorization',
-      'privilege escalation',
-    ],
+    triggers: ['idor', 'bola', 'tenant_id', 'bypassing authorization', 'privilege escalation'],
     technologies: ['REST API', 'Spring Boot'],
     lesson:
       'Test object-level authorization by substituting numeric/UUID IDs belonging to other users/tenants. Test method/verb tampering (GET vs POST vs PUT vs DELETE) and header injection (X-Original-URL, X-Rewrite-URL, X-Forwarded-For).',
@@ -157,15 +151,7 @@ const BUILTIN_SCENARIOS: IntelligenceScenario[] = [
     id: 'builtin-owasp-injection-sqli-cmdi-ssti',
     title: 'Injection surface testing (SQLi, Command Injection, SSTI)',
     category: 'vulnerability-pattern',
-    triggers: [
-      'sql injection',
-      'sqli',
-      'cmdi',
-      'command injection',
-      'ssti',
-      'jinja2',
-      'sleep(5)',
-    ],
+    triggers: ['sql injection', 'sqli', 'cmdi', 'command injection', 'ssti', 'jinja2', 'sleep(5)'],
     technologies: ['MySQL', 'PostgreSQL', 'SQLite', 'Python', 'Node.js'],
     lesson:
       'Probe query/search parameters for SQL injection (error, boolean-blind, sleep/waitfor time-based); template parameters for SSTI expressions (${7*7}, {{7*7}}, <%= 7*7 %>); and OS command parameters using separators (;, |, &&, `, $()) with sleep or out-of-band checks.',
@@ -192,13 +178,7 @@ const BUILTIN_SCENARIOS: IntelligenceScenario[] = [
     id: 'builtin-owasp-ssrf-recon',
     title: 'Server-Side Request Forgery (SSRF) and cloud metadata',
     category: 'vulnerability-pattern',
-    triggers: [
-      'ssrf',
-      'metadata.google',
-      '169.254.169.254',
-      'imds',
-      'internal port scan',
-    ],
+    triggers: ['ssrf', 'metadata.google', '169.254.169.254', 'imds', 'internal port scan'],
     technologies: ['AWS', 'GCP', 'Azure', 'Node.js', 'Python', 'Go'],
     lesson:
       'When the application fetches remote URLs, test for SSRF against cloud instance metadata (http://169.254.169.254/latest/meta-data/, http://metadata.google.internal/) and internal services (127.0.0.1, localhost, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) using decimal/IPv6 bypasses.',
@@ -254,13 +234,7 @@ const BUILTIN_SCENARIOS: IntelligenceScenario[] = [
     id: 'builtin-waf-bypass-origin-ip',
     title: 'WAF blocking and origin IP / host header bypasses',
     category: 'recon-gap',
-    triggers: [
-      'waf bypass',
-      'cf-ray',
-      'origin ip',
-      'host header bypass',
-      'modsecurity',
-    ],
+    triggers: ['waf bypass', 'cf-ray', 'origin ip', 'host header bypass', 'modsecurity'],
     technologies: ['Cloudflare', 'WAF', 'Nginx', 'Apache'],
     lesson:
       'When WAF blocks security payloads, search for the real backend origin IP via historical DNS (SecurityTrails, ViewDNS), SSL certificates (crt.sh), or headers. Test host header poisoning and bypass headers (X-Forwarded-For: 127.0.0.1, X-Real-IP, X-Originating-IP).',
@@ -519,7 +493,9 @@ export function formatIntelligenceContext(results: SearchResult[]): string {
   for (const r of results.slice(0, 4)) {
     const s = r.scenario;
     const checks =
-      s.recommendedChecks.length > 0 ? ` | checks: ${s.recommendedChecks.slice(0, 8).join(', ')}` : '';
+      s.recommendedChecks.length > 0
+        ? ` | checks: ${s.recommendedChecks.slice(0, 8).join(', ')}`
+        : '';
     const avoid =
       s.avoidMissing.length > 0 ? ` | avoid missing: ${s.avoidMissing.slice(0, 4).join(', ')}` : '';
     out.push(`- [${s.category}] ${s.title}: ${s.lesson}${checks}${avoid}`);
@@ -841,11 +817,10 @@ function extractToolResultScenarios(
   sourceSessionId?: string,
 ): ScenarioInput[] {
   const candidates: ScenarioInput[] = [];
-  const detected = detectTechnologies(output);
 
   // 1. Server header extraction
   const serverMatch = output.match(/(?:^|\r?\n)Server:\s*([^\r\n]+)/i);
-  if (serverMatch && serverMatch[1]) {
+  if (serverMatch?.[1]) {
     const rawServer = serverMatch[1].trim();
     const serverLower = rawServer.toLowerCase();
     if (serverLower.includes('nginx')) {
@@ -880,7 +855,12 @@ function extractToolResultScenarios(
         technologies: ['Apache'],
         lesson:
           'Target runs Apache HTTP Server. Check for exposed .htaccess files, /server-status handler leaks, mod_proxy CVEs, and multi-view content negotiation.',
-        recommendedChecks: ['.htaccess', '/server-status', '/server-info', 'case-sensitive file variants'],
+        recommendedChecks: [
+          '.htaccess',
+          '/server-status',
+          '/server-info',
+          'case-sensitive file variants',
+        ],
         avoidMissing: ['/server-status metric leak', '.htaccess source read'],
         source: `tool ${toolName}`,
         sourceSessionId,
@@ -896,7 +876,12 @@ function extractToolResultScenarios(
         technologies: ['ASP.NET'],
         lesson:
           'Target runs Microsoft IIS. Test for 8.3 short filename disclosure (e.g. /~1*), web.config leaks, ASP.NET trace.axd, and path normalization differences.',
-        recommendedChecks: ['8.3 short filename enumeration (dir~1.txt)', 'web.config', '/trace.axd', 'elmah.axd'],
+        recommendedChecks: [
+          '8.3 short filename enumeration (dir~1.txt)',
+          'web.config',
+          '/trace.axd',
+          'elmah.axd',
+        ],
         avoidMissing: ['IIS short filename disclosure', 'web.config credential exposure'],
         source: `tool ${toolName}`,
         sourceSessionId,
@@ -908,7 +893,7 @@ function extractToolResultScenarios(
 
   // 2. X-Powered-By / Framework header
   const poweredMatch = output.match(/(?:^|\r?\n)X-Powered-By:\s*([^\r\n]+)/i);
-  if (poweredMatch && poweredMatch[1]) {
+  if (poweredMatch?.[1]) {
     const rawPowered = poweredMatch[1].trim();
     const pLower = rawPowered.toLowerCase();
     if (pLower.includes('php')) {
@@ -926,7 +911,10 @@ function extractToolResultScenarios(
           'loose comparison (== 0) in authentication',
           'phpinfo.php',
         ],
-        avoidMissing: ['php://filter wrappers for source reading', 'loose type comparison in auth tokens'],
+        avoidMissing: [
+          'php://filter wrappers for source reading',
+          'loose type comparison in auth tokens',
+        ],
         source: `tool ${toolName}`,
         sourceSessionId,
         confidence: 0.9,
@@ -941,7 +929,12 @@ function extractToolResultScenarios(
         technologies: ['Node.js', 'Express'],
         lesson:
           'Target backend runs Node.js / Express. Test for prototype pollution (__proto__, constructor.prototype), SSRF via Axios/node-fetch, template injection, and package.json/env exposure.',
-        recommendedChecks: ['__proto__ parameter injection', 'package.json', '.env', 'ecosystem.config.js'],
+        recommendedChecks: [
+          '__proto__ parameter injection',
+          'package.json',
+          '.env',
+          'ecosystem.config.js',
+        ],
         avoidMissing: ['prototype pollution in JSON request bodies', 'PM2 ecosystem file leak'],
         source: `tool ${toolName}`,
         sourceSessionId,
@@ -1016,7 +1009,12 @@ function extractToolResultScenarios(
       technologies: ['WordPress', 'PHP'],
       lesson:
         'WordPress installation detected. Enumerate users via /wp-json/wp/v2/users, test xmlrpc.php for brute force/pingbacks, and inspect plugin versions.',
-      recommendedChecks: ['/wp-json/wp/v2/users', '/xmlrpc.php', '/wp-content/plugins/', '/readme.html'],
+      recommendedChecks: [
+        '/wp-json/wp/v2/users',
+        '/xmlrpc.php',
+        '/wp-content/plugins/',
+        '/readme.html',
+      ],
       avoidMissing: ['WordPress user enumeration via REST API', 'xmlrpc.php multicall'],
       source: `tool ${toolName}`,
       sourceSessionId,
@@ -1038,7 +1036,10 @@ function extractToolResultScenarios(
         triggers: [port, service, 'port', 'open', 'service'],
         technologies: [service],
         lesson: `Port ${port} is open running ${service}. Investigate service version, default credentials, and unauthenticated access vectors.`,
-        recommendedChecks: [`check port ${port} banner and version`, `test default credentials for ${service}`],
+        recommendedChecks: [
+          `check port ${port} banner and version`,
+          `test default credentials for ${service}`,
+        ],
         avoidMissing: [`unauthenticated access on port ${port}`],
         source: `tool ${toolName}`,
         sourceSessionId,

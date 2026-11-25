@@ -2,7 +2,7 @@
 // Provides tab-completion and inline suggestions for slash commands,
 // subcommand arguments, session names, prompt history, and security workflows.
 
-import { SLASH_ITEMS, type SlashItem } from './slashItems.js';
+import { SLASH_ITEMS } from './slashItems.js';
 
 export interface AutocompleteContext {
   history?: string[];
@@ -96,9 +96,7 @@ export function computeAutocomplete(
 
       const options = COMMAND_ARG_OPTIONS[cmd];
       if (options) {
-        const match = options.find((opt) =>
-          opt.toLowerCase().startsWith(argPrefix.toLowerCase()),
-        );
+        const match = options.find((opt) => opt.toLowerCase().startsWith(argPrefix.toLowerCase()));
         if (match && match.length > argPrefix.length) {
           const ghostText = match.slice(argPrefix.length);
           return {
@@ -114,7 +112,8 @@ export function computeAutocomplete(
     const typed = inputValue.toLowerCase();
     const allItems: Array<{ name: string; args?: string }> = [
       ...SLASH_ITEMS,
-      ...(ctx?.skills?.map((s) => ({ name: s.name.startsWith('/') ? s.name : `/${s.name}` })) ?? []),
+      ...(ctx?.skills?.map((s) => ({ name: s.name.startsWith('/') ? s.name : `/${s.name}` })) ??
+        []),
     ];
 
     for (const item of allItems) {
@@ -132,7 +131,7 @@ export function computeAutocomplete(
 
     // If typed exactly matches command name with args, suggest trailing space
     const exact = allItems.find((item) => item.name.toLowerCase() === typed);
-    if (exact && exact.args && !inputValue.endsWith(' ')) {
+    if (exact?.args && !inputValue.endsWith(' ')) {
       return {
         ghostText: ' ',
         fullValue: `${exact.name} `,
@@ -147,7 +146,7 @@ export function computeAutocomplete(
   const lowerInput = inputValue.toLowerCase();
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const item = history[i];
-    if (item && item.toLowerCase().startsWith(lowerInput) && item.length > inputValue.length) {
+    if (item?.toLowerCase().startsWith(lowerInput) && item.length > inputValue.length) {
       const ghostText = item.slice(inputValue.length);
       return {
         ghostText,
@@ -169,4 +168,3 @@ export function computeAutocomplete(
 
   return null;
 }
-

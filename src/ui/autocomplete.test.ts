@@ -64,4 +64,3 @@ describe('computeAutocomplete', () => {
     expect(res?.fullValue).toContain('check for file upload bypasses (Upload2Shell)');
   });
 });
-

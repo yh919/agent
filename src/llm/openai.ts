@@ -218,13 +218,16 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
       if (resp.status !== 200) {
         if (resp.status === 402 && this.label === 'openrouter') {
           const match = raw.match(/can only afford (\d+)/i);
-          if (match && match[1]) {
+          if (match?.[1]) {
             const afford = Number.parseInt(match[1], 10);
             if (afford > 100) {
               const clamped = Math.max(100, Math.min(afford - 50, 4000));
               this.maxTokens = clamped;
               body.max_tokens = clamped;
-              const { signal: retrySignal, dispose: retryDispose } = withTimeout(signal, CHAT_TIMEOUT_MS);
+              const { signal: retrySignal, dispose: retryDispose } = withTimeout(
+                signal,
+                CHAT_TIMEOUT_MS,
+              );
               try {
                 const retryResp = await fetch(`${this.baseURL}/chat/completions`, {
                   method: 'POST',
@@ -235,8 +238,8 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
                 const retryRaw = await retryResp.text();
                 if (retryResp.status === 200) {
                   const retryOut = JSON.parse(retryRaw) as OAIChatResp;
-                  if (!retryOut.error && retryOut.choices?.length) {
-                    const choice = retryOut.choices[0]!;
+                  const choice = retryOut.error ? undefined : retryOut.choices?.[0];
+                  if (choice) {
                     const msg: Message = {
                       role: 'assistant',
                       content: this.trimLeakedTemplate(choice.message.content || ''),
@@ -501,14 +504,17 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
         const raw = await resp.text();
         if (resp.status === 402 && this.label === 'openrouter') {
           const match = raw.match(/can only afford (\d+)/i);
-          if (match && match[1]) {
+          if (match?.[1]) {
             const afford = Number.parseInt(match[1], 10);
             if (afford > 100) {
               const clamped = Math.max(100, Math.min(afford - 50, 4000));
               this.maxTokens = clamped;
               body.max_tokens = clamped;
               dispose();
-              const { signal: retrySignal, dispose: retryDispose } = withTimeout(signal, CHAT_TIMEOUT_MS);
+              const { signal: retrySignal, dispose: retryDispose } = withTimeout(
+                signal,
+                CHAT_TIMEOUT_MS,
+              );
               try {
                 const retryResp = await fetch(`${this.baseURL}/chat/completions`, {
                   method: 'POST',
@@ -521,7 +527,10 @@ export class OpenAIClient implements Client, StreamingClient, Pinger {
                 }
                 const retryRaw = await retryResp.text();
                 retryDispose();
-                throw withRetryAfter(classifyBackend(this.label, null, retryResp.status, retryRaw), retryResp);
+                throw withRetryAfter(
+                  classifyBackend(this.label, null, retryResp.status, retryRaw),
+                  retryResp,
+                );
               } catch (err) {
                 retryDispose();
                 throw err;

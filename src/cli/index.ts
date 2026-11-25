@@ -604,38 +604,42 @@ Run with --help for setup flags, or use /provider in the TUI to reconfigure.
   tools.register(new WebSearchTool());
   tools.register(new AskUserTool(bridgedAsk));
   tools.register(
-    new ConfirmFindingTool(findingsStore, (finding, path) => {
-      captureStore.addBurpIssue({
-        id: `finding:${finding.slug}`,
-        title: finding.title,
-        severity: finding.severity,
-        confidence: 'Certain',
-        url: finding.url,
-        method: finding.method,
-        parameter: finding.parameter,
-        detail: [
-          finding.impact,
-          finding.responseExcerpt ? `\nEvidence:\n${finding.responseExcerpt}` : '',
-          finding.curl ? `\nReproduce:\n${finding.curl}` : '',
-        ].join('\n'),
-        remediation: finding.remediation,
-        path,
-        rawRequestB64: Buffer.from(findingRequestForBurp(finding), 'utf8').toString('base64'),
-      });
-      if (cfg.hooks.length > 0) {
-        void runNotifyHooks(
-          'finding-confirmed',
-          {
-            EVENT: 'finding-confirmed',
-            FINDING_TITLE: finding.title,
-            FINDING_SEVERITY: finding.severity,
-            FINDING_PATH: path,
-          },
-          cfg.hooks,
-          (text) => noticeHolder.publish?.(text),
-        );
-      }
-    }, intelligenceStore),
+    new ConfirmFindingTool(
+      findingsStore,
+      (finding, path) => {
+        captureStore.addBurpIssue({
+          id: `finding:${finding.slug}`,
+          title: finding.title,
+          severity: finding.severity,
+          confidence: 'Certain',
+          url: finding.url,
+          method: finding.method,
+          parameter: finding.parameter,
+          detail: [
+            finding.impact,
+            finding.responseExcerpt ? `\nEvidence:\n${finding.responseExcerpt}` : '',
+            finding.curl ? `\nReproduce:\n${finding.curl}` : '',
+          ].join('\n'),
+          remediation: finding.remediation,
+          path,
+          rawRequestB64: Buffer.from(findingRequestForBurp(finding), 'utf8').toString('base64'),
+        });
+        if (cfg.hooks.length > 0) {
+          void runNotifyHooks(
+            'finding-confirmed',
+            {
+              EVENT: 'finding-confirmed',
+              FINDING_TITLE: finding.title,
+              FINDING_SEVERITY: finding.severity,
+              FINDING_PATH: path,
+            },
+            cfg.hooks,
+            (text) => noticeHolder.publish?.(text),
+          );
+        }
+      },
+      intelligenceStore,
+    ),
   );
   tools.register(
     new LoadSkillTool(skills, async (skillName, objective, signal) => {

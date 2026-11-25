@@ -121,7 +121,12 @@ export class Store {
     return join(dirname(dirname(this.path)), 'context', `${id}.md`);
   }
 
-  load(): { messages: Message[]; target: Target | null; memory: SessionMemory | null; name?: string } {
+  load(): {
+    messages: Message[];
+    target: Target | null;
+    memory: SessionMemory | null;
+    name?: string;
+  } {
     if (!this.path || !existsSync(this.path)) {
       return { messages: [], target: null, memory: null };
     }

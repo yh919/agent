@@ -43,7 +43,11 @@ describe('routeSkill', () => {
   });
 
   it('routes upload2shell for file upload work', () => {
-    const r = routeSkill('test the avatar file upload for arbitrary upload bypasses', skills, new Target());
+    const r = routeSkill(
+      'test the avatar file upload for arbitrary upload bypasses',
+      skills,
+      new Target(),
+    );
     expect(r?.skill).toBe('upload2shell');
     expect(r?.summary).toBe('plan · upload2shell');
   });
